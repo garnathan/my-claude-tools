@@ -28,6 +28,11 @@
       "name": "pentest",
       "source": "./skills/pentest",
       "description": "Authorized penetration test — full engagement lifecycle (rules-of-engagement gate → recon → enumeration → threat model/attack tree → exploitation → vulnerability chaining → post-exploitation → professional report) aligned to PTES, NIST SP 800-115, OWASP WSTG/ASVS/API Top 10, and MITRE ATT&CK. Adversary emulation toward a crown-jewel objective with minimum-necessary non-destructive proof, CVSS scoring, and a retest check per finding. Authorization is a hard first gate."
+    },
+    {
+      "name": "llm-eval",
+      "source": "./skills/llm-eval",
+      "description": "Build and run a rigorous evaluation of any LLM app/agent — and make the eval itself trustworthy. Deterministic-first metrics, judges validated against human labels (Cohen's κ) before trusted, claim-decomposition faithfulness/hallucination detection, judge-bias controls (position/verbosity/self-preference), and statistical honesty (paired-difference + confidence intervals + fixed temperature — never a win on noise). Ships a zero-dependency eval harness; no promptfoo/DeepEval/RAGAS needed."
     }
   ]
 }

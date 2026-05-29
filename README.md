@@ -10,6 +10,7 @@ Personal, reusable [Claude Code](https://claude.com/claude-code) skills — appl
 | **`/deai`** | Rewrite AI-generated text so it reads as genuinely human-written in a professional register — strip LLM signatures (flagged vocab, scaffolding, em-dash overuse, uniform cadence, no-stance hedging) while preserving meaning and never fabricating. Litmus: output reads "probably not AI". |
 | **`/chaos`** | API-focused chaos engineering. Hypothesis → inject one fault (via a **shipped zero-dependency fault proxy** — no Toxiproxy/Gremlin needed) → **verify the resilience mechanism's fingerprint** (breaker = latency cliff, retry = bounded inbound count + jitter, fallback = degraded body, shed = fast 429+Retry-After) → recover → self-critique. Strict blast-radius + auto-disarm safety; regression experiment per weakness. Litmus: prove a mechanism carries a fault, or find the weakness — never leave a fault armed. |
 | **`/pentest`** | Authorized penetration test against any system you own/are permitted to test. **Rules-of-engagement gate** (authorization is non-skippable) → recon → enumeration → threat model + **attack tree** → exploitation (Confirmed vs Suspected, **non-destructive minimum proof**) → **vulnerability chaining** (low+low→critical toward a crown-jewel objective) → post-exploitation/blast-radius → CVSS-scored **professional report** + retest check per finding. Aligned to PTES, NIST SP 800-115, OWASP WSTG/ASVS/API Top 10, MITRE ATT&CK. Litmus: a *demonstrated chain* to an objective, not a CVE list. |
+| **`/llm-eval`** | Build/run a rigorous eval of any LLM app or agent — **and make the eval itself trustworthy.** Deterministic-first metrics → **validate every judge against human labels (Cohen's κ)** before trusting its number → claim-decomposition **faithfulness/hallucination** detection → **judge-bias controls** (position-swap/verbosity/self-preference) → **statistical honesty** (paired-difference + confidence intervals + fixed temperature; never a win on noise). Ships a **zero-dependency eval harness** (deterministic + judge scorers, position-swap, κ meta-eval, CI-bound gate) — no promptfoo/DeepEval/RAGAS needed. Litmus: find a flaw in a trusted benchmark (unvalidated judge, biased rubric, an A/B "win" inside the noise) or catch a regression it misses. |
 
 ## Layout
 
@@ -33,11 +34,17 @@ claude-skills/
 │   │   ├── method-and-safety.md# experiment loop, blast radius, abort/auto-disarm, ledger, regression
 │   │   └── assets/
 │   │       └── fault-proxy.mjs # shipped zero-dependency fault-injecting reverse proxy
-│   └── pentest/
-│       ├── SKILL.md                    # orchestration: RoE gate → recon → threat model → exploit → chain → report
-│       ├── methodology.md              # PTES/NIST lifecycle, WSTG/API Top 10/cloud/auth test flow, attack trees, ATT&CK
-│       ├── exploitation.md             # proof-of-exploit standard (Confirmed/Suspected) + chaining catalog + technique
-│       └── engagement-and-reporting.md # RoE/authorization gate, CVSS v4.0, report anatomy, disclosure, retest loop
+│   ├── pentest/
+│   │   ├── SKILL.md                    # orchestration: RoE gate → recon → threat model → exploit → chain → report
+│   │   ├── methodology.md              # PTES/NIST lifecycle, WSTG/API Top 10/cloud/auth test flow, attack trees, ATT&CK
+│   │   ├── exploitation.md             # proof-of-exploit standard (Confirmed/Suspected) + chaining catalog + technique
+│   │   └── engagement-and-reporting.md # RoE/authorization gate, CVSS v4.0, report anatomy, disclosure, retest loop
+│   └── llm-eval/
+│       ├── SKILL.md                  # orchestration: recon → eval set → metrics → validate judge → run → faithfulness → report
+│       ├── methodology.md            # lifecycle, eval-set construction, metric taxonomy, statistical rigor, agentic eval, pitfalls
+│       ├── faithfulness-and-judges.md# claim-decomposition faithfulness, RAGAS quartet, judge done-well + biases + meta-eval (κ)
+│       └── assets/
+│           └── eval-harness.mjs      # shipped zero-dependency eval runner (deterministic+judge scorers, swap, κ, CI gate)
 └── README.md
 ```
 

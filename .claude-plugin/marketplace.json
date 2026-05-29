@@ -18,6 +18,11 @@
       "name": "deai",
       "source": "./skills/deai",
       "description": "Rewrite AI-generated text so it reads as genuinely human-written in a professional register — strip LLM signatures while preserving meaning, never fabricating."
+    },
+    {
+      "name": "chaos",
+      "source": "./skills/chaos",
+      "description": "API-focused chaos engineering — hypothesis-driven fault injection via a shipped zero-dependency fault proxy + black-box verification of the resilience-mechanism fingerprint (breaker/retry/fallback/shed), strict blast-radius + auto-disarm safety, regression test per weakness."
     }
   ]
 }

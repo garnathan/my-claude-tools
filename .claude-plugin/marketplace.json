@@ -23,6 +23,11 @@
       "name": "chaos",
       "source": "./skills/chaos",
       "description": "API-focused chaos engineering — hypothesis-driven fault injection via a shipped zero-dependency fault proxy + black-box verification of the resilience-mechanism fingerprint (breaker/retry/fallback/shed), strict blast-radius + auto-disarm safety, regression test per weakness."
+    },
+    {
+      "name": "pentest",
+      "source": "./skills/pentest",
+      "description": "Authorized penetration test — full engagement lifecycle (rules-of-engagement gate → recon → enumeration → threat model/attack tree → exploitation → vulnerability chaining → post-exploitation → professional report) aligned to PTES, NIST SP 800-115, OWASP WSTG/ASVS/API Top 10, and MITRE ATT&CK. Adversary emulation toward a crown-jewel objective with minimum-necessary non-destructive proof, CVSS scoring, and a retest check per finding. Authorization is a hard first gate."
     }
   ]
 }

@@ -73,6 +73,10 @@ Per toolkit §8 + oracle-methods R6/R7. Each finding: **severity + confidence**,
 
 End with the **litmus scorecard**: *N new Confirmed bugs not previously known* + what you re-confirmed vs found new + the coverage ledger (what was probed, what was skipped and why).
 
+## Relationship to /pentest
+
+`/bug-hunt` hunts **defects of all classes** (correctness, resilience, concurrency, frontend, observability, security) to **fix** — oracle-driven, output is bugs + regression tests, no authorization gate beyond "test what you own". `/pentest` is **adversary emulation against an authorized target toward a crown-jewel objective** — RoE-gated, with deeper exploitation, vulnerability *chaining* (low+low→critical), post-exploitation, CVSS scoring, and a professional report. They share the Confirmed-vs-Suspected discipline and the regression/retest-per-finding habit. A security finding from a bug-hunt is an ideal **seed** for a pentest exploitation/chaining pass — hand it to `/pentest` to prove what an attacker actually does with it.
+
 ## Rules
 - **Read all three knowledge files first** — taxonomy, toolkit, oracle-methods.
 - **Manufacture an oracle, then attack it.** Don't just walk a checklist — derive what must be true for *this* app and try to break it. Mine the repo's own incident history for variant seeds.

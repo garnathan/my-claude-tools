@@ -1,0 +1,16 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# Claude local state (if anyone runs claude inside this repo)
+.claude/settings.local.json
+.claude/worktrees/
+
+# Scratch
+/tmp/
+*.log

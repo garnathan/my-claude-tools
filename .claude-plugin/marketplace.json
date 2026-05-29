@@ -13,6 +13,11 @@
       "name": "bug-hunt",
       "source": "./skills/bug-hunt",
       "description": "Adversarial, expert-level bug hunt for any application — recon, static, runtime, and adversarial probes driven by a researched bug taxonomy."
+    },
+    {
+      "name": "deai",
+      "source": "./skills/deai",
+      "description": "Rewrite AI-generated text so it reads as genuinely human-written in a professional register — strip LLM signatures while preserving meaning, never fabricating."
     }
   ]
 }

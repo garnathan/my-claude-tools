@@ -6,7 +6,8 @@ Personal, reusable [Claude Code](https://claude.com/claude-code) skills — appl
 
 | Skill | What it does |
 |---|---|
-| **`/bug-hunt`** | Adversarial, expert-level bug hunt for any app (web/API/service/CLI/agent). Recon → static → runtime → adversarial probes → triage, driven by a researched taxonomy of ~180 bug classes (OWASP, Google SRE, AWS, Nygard, Jepsen, PortSwigger, react.dev/web.dev). Litmus test: run it against an already-checked app and find *new* real bugs. |
+| **`/bug-hunt`** | Adversarial, oracle-driven bug hunt for any app (web/API/service/CLI/agent). Recon+threat-model → **manufacture oracles** (invariants, metamorphic relations, differential pairs, state machines, variant-from-history) → parallel fan-out per domain → **prove impact** (Confirmed vs Suspected) → self-critique → regression test per bug. ~180-class taxonomy + detection toolkit + oracle-methods. Litmus: find *new* real bugs in an already-checked app. |
+| **`/deai`** | Rewrite AI-generated text so it reads as genuinely human-written in a professional register — strip LLM signatures (flagged vocab, scaffolding, em-dash overuse, uniform cadence, no-stance hedging) while preserving meaning and never fabricating. Litmus: output reads "probably not AI". |
 
 ## Layout
 
@@ -15,10 +16,14 @@ claude-skills/
 ├── .claude-plugin/
 │   └── marketplace.json        # lets this repo be added via `/plugin marketplace add`
 ├── skills/
-│   └── bug-hunt/
-│       ├── SKILL.md            # the orchestration / workflow
-│       ├── bug-taxonomy.md     # the field guide: bug class → detection probe
-│       └── detection-toolkit.md# how to run each probe
+│   ├── bug-hunt/
+│   │   ├── SKILL.md            # orchestration: recon → oracles → fan-out → prove → self-critique → report
+│   │   ├── bug-taxonomy.md     # ~180 known bug classes → detection probe
+│   │   ├── detection-toolkit.md# how to run each probe
+│   │   └── oracle-methods.md   # manufacture-an-oracle techniques + hunt rigor (the expert brain)
+│   └── deai/
+│       ├── SKILL.md            # de-AI text → human, professional register
+│       └── ai-tells.md         # AI-writing tells + fixes (two-tier model)
 └── README.md
 ```
 

@@ -1,85 +1,84 @@
 ---
 name: bug-hunt
-description: Adversarial, expert-level bug hunt for ANY application (web app, API, service, CLI, agent) — recon the target, then systematically hunt across security, resilience, concurrency, frontend, streaming, LLM-agent, distributed, and observability bug classes using a researched taxonomy. Use before/after a release, when asked to "find bugs / find broken things / make it rock solid", or to audit an app you didn't write.
+description: Adversarial, expert-level bug hunt for ANY application (web app, API, service, CLI, agent). Goes past a checklist — recon + threat-model, derive the app's invariants and manufacture oracles, fan out per domain, attack each oracle, prove impact (Confirmed vs Suspected), self-critique for false-positives and gaps, and emit a regression test per bug. Use before/after a release, when asked to "find bugs / find broken things / make it rock solid / audit this", or to harden an app you didn't write.
 allowed-tools: Read, Grep, Glob, Bash, Agent, WebFetch, WebSearch, mcp__chrome-devtools__*, mcp__oci__*, mcp__devops__*
 ---
 
-# Bug Hunt — adversarial, application-agnostic
+# Bug Hunt — adversarial, oracle-driven
 
-You are hunting for bugs the way a world-class red-teamer, SRE, and senior reviewer *combined* would — finding the failures that static review and unit tests miss, including classes the author never considered. You are not doing a code review of a diff; you are interrogating a whole system for how it breaks.
+You hunt bugs the way a world-class red-teamer, SRE, and senior reviewer combined would — finding the failures that static review and unit tests miss, including classes the author never considered. You are not reviewing a diff; you are interrogating a whole system for how it breaks, and you hold yourself to the bar that the leading 2026 bug-finding systems actually meet.
 
-This skill is **application-agnostic**. It learned from real production incidents (multi-tenant data leaks, security-list clobbering, webhook dedup across replicas, cross-network path failures, self-signed-TLS breakage, SSE truncation, LLM placeholder leaks) but it hunts *any* app you build or use. Recon first, then apply only the sections that fit.
+This skill is **application-agnostic**. It learned from real production incidents but hunts *any* app. Recon first, apply only what fits.
 
-## Your knowledge base — READ THESE FIRST
+## Read your knowledge base FIRST (all three)
 
-At the start of every run, read both companion files in this skill's directory:
-1. **`bug-taxonomy.md`** — the field guide: ~180 bug classes across 14 domains (A–N), each with a concrete detection probe, sourced from OWASP, Google SRE, AWS, Nygard, Jepsen, PortSwigger, react.dev/web.dev/MDN. This is *what* to hunt for.
-2. **`detection-toolkit.md`** — *how* to run each probe (curl patterns, race bursts, browser-driven techniques, log triage, static analysis, fault injection, soak tests, triage discipline).
+In this skill's directory:
+1. **`bug-taxonomy.md`** — ~180 known bug classes across 14 domains, each with a detection probe (OWASP, Google SRE, AWS, Nygard, Jepsen, PortSwigger, react.dev/web.dev). *What* to hunt.
+2. **`detection-toolkit.md`** — *how* to run each probe (curl, race bursts, browser-driven, log triage, static/dataflow, fault injection, soak, triage).
+3. **`oracle-methods.md`** — *how to find what nobody anticipated*: manufacture an oracle (invariant / metamorphic relation / differential pair / state machine / spec-diff / variant-from-history) then attack it, plus the rigor machinery (proof-of-exploit gate, coverage ledger, parallel fan-out, dataflow precision, self-critique, severity+confidence, regression tests). Read this one carefully — it is the difference between a checklist and an expert.
 
-Load them into context before hunting — they contain the depth that lets you find things you'd never think of unaided.
+## The standard (the litmus test)
 
-## The standard: this is the litmus test
+Run against an app the team already checked and **find NEW, real bugs they missed**. A surface sweep is not a bug hunt. If you only re-find the known issues, you ran it too shallow. The bar: every domain probed (ledger proves it), every derived invariant attacked, every Confirmed finding carries a runnable proof and a regression test. **Opus 4.8 can sustain far more reasoning per run than the tools that set today's bar — use it: derive more oracles, fan out wider, self-critique harder.**
 
-The bar for this skill is: **run it against an app the team has already manually checked, and find NEW, real bugs they missed.** A surface sweep (load the page, check it 200s) is not a bug hunt. If you only re-find what's already known, you ran it too shallow. Go adversarial: race conditions, authz bypass, injection, cross-tenant parity, idempotency replay, resource leaks, fault injection, the streaming/LLM/distributed edge cases. Depth over breadth-of-reassurance.
+## Phase 0 — Recon + threat model
 
-## Phase 0 — Recon (build the target model)
+Map before you hunt (taxonomy §A). Establish: **stack, full surface** (routes via registry/OpenAPI/router files; pages; jobs/crons; webhooks; external deps), **auth model**, **data model & tenancy** (isolation boundary?), **deploy topology** (replicas/LB/regions/cloud), **trust boundaries** (what data is attacker-influenced). Draw the data-flow; run **STRIDE per trust boundary** to surface the abuse cases that matter for *this* app. Output a short target model and select the applicable taxonomy domains.
 
-You cannot hunt what you haven't mapped. Per taxonomy §A, establish and write down:
-- **Stack** (languages, frameworks, frontend type, datastores, cache, queue, cloud, container runtime).
-- **Surface** (every route — find a route registry / OpenAPI / router files; every page; every background job/cron; every webhook; every external dependency).
-- **Auth model** (how identity is established, where authz is enforced, what roles/tiers exist).
-- **Data model & tenancy** (is state shared across users/tenants? what's the isolation boundary?).
-- **Deploy topology** (single process or replicas? LB? containerised? multi-region/cloud?).
-- **Trust boundaries** (what data is attacker-influenced: user input, ingested logs, third-party responses, uploads, webhooks).
+**Then start the coverage ledger** (oracle-methods R2): a `(surface × technique/domain)` grid in a scratch file. You will not be allowed to claim "done" with blank cells.
 
-Output a short target model and **select which taxonomy sections apply** (B–N). Skip what doesn't fit. State your plan before probing.
+**Scope & authorisation:** only hunt what you own or are authorised to test. Adversarial probes (injection/race/SSRF/auth-bypass) are fine against your own app/staging. On production default to read-only/observational; run active/mutating probes only with explicit go-ahead, and never one that could corrupt prod data or page an on-call. Carry the user's guardrails verbatim into every sub-agent.
 
-**Scope & authorisation:** only hunt targets you own or are authorised to test. Adversarial probes (injection, race, SSRF, auth bypass) against your own app/staging are fine; never run them against third-party systems you don't control. Prefer staging/local for destructive probes; on production, default to read-only/observational unless the user explicitly authorises active probing, and never run a probe that could corrupt prod data or page an on-call.
+## Phase 1 — Manufacture oracles (the heart)
 
-## Phase 1 — Cheap broad sweep (highest yield per minute)
+Per `oracle-methods.md` Part 1, derive — and write down — the things that must be true:
+- **Invariants** (O1): mine from code + docs/types + ~30 dynamic runs. 10–20 "X must ALWAYS hold" statements.
+- **Metamorphic relations** (O2): 3–5 per non-deterministic endpoint (search/rank/aggregate/LLM).
+- **Differential pairs** (O3): replica A/B, old/new build, v1/v2, cached/uncached, UI/API, profile/profile, doc/behaviour.
+- **State-machine sequences** (O4): the lifecycle operations and their illegal edges.
+- **Variant seeds** (O6): mine the project's own incident history (`git log --grep=fix`, CHANGELOG, memory/post-mortems, closed bugs) → each past bug is a template to hunt elsewhere. **This is the highest-yield, most-skipped step.**
 
-Run the low-cost, high-signal checks first so early findings shape the deep dive:
-- **Console + network sweep** of every page (errors/warns; 4xx/5xx that aren't auth gates).
-- **Typecheck + lint + dependency audit** (authoritative unused/dead-code; known CVEs).
-- **Static footgun grep** (empty catches, `innerHTML`/`dangerouslySetInnerHTML` on data, no-timeout clients, devDep imports, secrets, broad excepts) per toolkit §5.
-- **Health/version + "deployed ≠ working"** content probe (taxonomy §166–167).
-- **Security/quality scanner** if available, triaged hard (toolkit §5).
+## Phase 2 — Cheap broad sweep
 
-## Phase 2 — Static analysis pass
+Highest yield per minute, so early signal shapes the deep dive: console+network sweep of every page; typecheck + lint + dependency/CVE audit; static footgun grep (empty catches, unsafe render, no-timeout clients, devDep imports, secrets, broad excepts); health + "deployed ≠ working" content probe; security/quality scanner (triaged hard). Mark the ledger as you go.
 
-Walk the code for the applicable taxonomy classes you can see without running anything: missing tenant predicates (§D), swallowed errors (§159), missing timeouts/ret-without-jitter (§F), CAS-less read-modify-write (§G), per-replica state (§85), unsafe rendering / injection sinks (§C, §27), excessive agency / unstripped write tools (§140). Note candidates; confirm at runtime where possible.
+## Phase 3 — Static + dataflow
 
-## Phase 3 — Runtime / behavioural hunt
+Walk the code for the applicable classes you can see without running anything (missing tenant predicates, swallowed errors, missing timeouts, CAS-less RMW, per-replica state, unsafe rendering, excessive agency). For any injection/SSRF/traversal candidate, **trace source→sink** (oracle-methods R4) before it counts — untraced = Suspected at best.
 
-Drive the live app (browser for SPAs per toolkit §3; curl for APIs §1). Exercise every surface. Apply the frontend (§I), streaming (§J), and API-contract (§E) classes against actual behaviour: stream leaks, memory growth, out-of-order races, empty-vs-error confusion, pagination edges, stale cache after mutation, double-submit.
+## Phase 4 — Runtime / behavioural
 
-## Phase 4 — Adversarial probes (this is where the new bugs are)
+Drive the live app (browser for SPAs per toolkit §3; curl for APIs §1). Exercise every surface; apply the frontend/streaming/API-contract classes against real behaviour (stream leaks, memory growth, out-of-order races, empty-vs-error, pagination edges, stale cache, double-submit).
 
-This is the phase a normal check skips — and where the litmus-test wins come from. Apply, as scoped/authorised:
-- **Access control & isolation (§D):** the two-tenant/two-user parity test (P1) on *every* scoped endpoint; IDOR via ID swap; BFLA via verb tampering; mass assignment of privileged fields; SSRF on URL-fetch fields.
-- **Injection (§C):** SQLi/NoSQLi/command/SSTI/path-traversal/XXE/XSS probes on every input that round-trips or reaches an interpreter/shell/template/renderer.
-- **Auth/session/JWT (§B):** the JWT attacks, session fixation, cosmetic-gate bypass, cookie flags.
-- **Race & idempotency (§E, P4):** parallel bursts on limited actions; idempotency replay (same key, and to a second replica).
-- **Resilience / chaos (§F, P5):** fault-inject a dependency — assert timeouts fire, breakers trip *and recover*, bulkheads isolate, shedding is fast, degraded mode engages.
-- **Distributed/networking (§H, P2/P3):** direct-from-container egress to every dependency; post-deploy route/SL/IAM/config drift diff; cross-tenant resource-name and shared-rule clobbering.
+## Phase 5 — Attack the oracles, in parallel (where the new bugs are)
 
-## Phase 5 — Domain deep dives (pick from recon)
+This is the phase a normal check skips. For a non-trivial target, **fan out one sub-agent per domain** (oracle-methods R3) — authz/isolation, injection, concurrency/idempotency, resilience/chaos, frontend/streaming, LLM-agent, distributed/networking, observability — each handed the target model + invariant list + ledger + guardrails. Each sub-agent:
+- attacks its assigned invariants and metamorphic/differential relations,
+- runs its taxonomy probes (the two-tenant parity test, IDOR/BFLA/verb-tampering, injection, JWT/session, race + idempotency replay via single-packet/parallel-burst, fault injection asserting breakers trip *and recover*, direct-from-container egress, SSE leak/backpressure, prompt-injection via untrusted-data paths, tool-loop inspection),
+- explores state-machine sequences,
+- returns findings with evidence.
+Merge, dedupe, cross-check.
 
-- **LLM/agent app (§K):** indirect prompt injection via ingested data (the dominant risk), tool-loop bugs, fabricated citations, truncation, placeholder leakage, fallback-model drift, excessive agency. Inspect the tool-call trace, not just the final output.
-- **Distributed/multi-tenant (§D, §G, §H):** the parity test, CAS races, split-brain, eventual-consistency loops, scheduled-job-on-all-replicas.
-- **Performance/leaks (§G, §M):** soak + leak watch (P6); detached DOM; long tasks; OOM headroom; deploy-hygiene (SIGTERM drain, keepAlive vs LB timeout, config drift).
+## Phase 6 — Prove impact (Confirmed vs Suspected)
 
-## Phase 6 — Triage & report
+Per oracle-methods R1: every candidate gets one honest attempt at a runnable proof. Split findings into **Confirmed** (impact demonstrated — quote the proof) and **Suspected** (looks wrong, impact unproven — say what's missing). On prod, where proving impact would be destructive, mark Suspected and describe the safe proof for staging. Never dress a Suspected up as Confirmed.
 
-Per toolkit §8. Every finding gets: **severity** (critical/high/medium/low), **evidence anchor** (quoted request+response / console line / log entry / heap delta / trace), **reproduction**, **blast radius**, **fix sketch** (with file:line if traceable). Group the report **Critical → High → Medium → Low**, then a separate **Expected (not bugs)** appendix proving you triaged. If the user asked you to fix things and is away, fix the shallow high-confidence ones in-tree and flag the deep/risky ones; otherwise report and let them choose.
+## Phase 7 — Self-critique (kill FPs, name gaps)
 
-End with the **litmus scorecard**: *N new real bugs found that weren't previously known* — and, if a prior known-issues list exists, what you re-confirmed vs what's new.
+Per oracle-methods R5, with fresh context where possible: re-examine every finding (reproducible? dataflow holds? actually expected behaviour?) and demote/drop what doesn't survive. Then **mutation-test the hunt** — "if I flipped this comparison / removed this guard, would any probe I ran have caught it?" — and probe the blind spots that exposes. Reconcile against the ledger; every blank cell is probed or listed as a gap with a reason.
+
+## Phase 8 — Report + regression
+
+Per toolkit §8 + oracle-methods R6/R7. Each finding: **severity + confidence**, **evidence anchor** (quoted request/response, console line, log entry, trace, heap delta), **reproduction**, **blast radius**, **fix sketch** (file:line if traceable), and — for every Confirmed bug — a **regression test or repro command that fails now and passes once fixed**. Group **Confirmed (Critical→Low)**, then **Suspected**, then **Expected (not bugs)** proving you triaged. If the user asked you to fix and is away, fix shallow high-confidence ones and flag the rest; else report and let them choose.
+
+End with the **litmus scorecard**: *N new Confirmed bugs not previously known* + what you re-confirmed vs found new + the coverage ledger (what was probed, what was skipped and why).
 
 ## Rules
-- **Read the taxonomy + toolkit first.** They are the difference between a checklist and an expert.
-- **Recon before probing.** Apply only the sections that fit the target; don't hunt SSE bugs in a CLI.
-- **Authorised targets only.** Destructive/adversarial probes on prod need explicit go-ahead; default read-only on prod.
-- **Evidence anchor on every finding.** A real artifact, quoted. Never "looks fine"; never "probably a bug" without a repro.
-- **Don't cry wolf.** Separate real bugs from expected behaviour (auth 302s, needs-params 400s, not-configured envelopes) and low-confidence leads. Trust is the asset.
-- **Go deep, not just wide.** The skill's whole point is finding what the surface check missed. If you didn't run an adversarial probe, you didn't bug-hunt.
-- **Unit-tests-passing is not evidence.** Validate user-facing behaviour against the running system.
+- **Read all three knowledge files first** — taxonomy, toolkit, oracle-methods.
+- **Manufacture an oracle, then attack it.** Don't just walk a checklist — derive what must be true for *this* app and try to break it. Mine the repo's own incident history for variant seeds.
+- **Coverage is a claim you back with the ledger.** No "done" with blank cells. This is the rule that exists because "verified" was once claimed while obvious bugs remained.
+- **Confirmed needs a proof; trace dataflow before crying injection.** A confirmed low beats a suspected critical. Crying wolf destroys the skill.
+- **Fan out.** Spend the reasoning the older tools couldn't — parallel sub-agents per domain.
+- **Authorised targets only**; carry guardrails into every sub-agent; default read-only on prod.
+- **A regression test per Confirmed bug.** Turn the hunt into durable coverage.
+- **Unit-tests-passing is not evidence.** Validate behaviour against the running system.

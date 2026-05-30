@@ -33,6 +33,16 @@
       "name": "llm-eval",
       "source": "./skills/llm-eval",
       "description": "Build and run a rigorous evaluation of any LLM app/agent — and make the eval itself trustworthy. Deterministic-first metrics, judges validated against human labels (Cohen's κ) before trusted, claim-decomposition faithfulness/hallucination detection, judge-bias controls (position/verbosity/self-preference), and statistical honesty (paired-difference + confidence intervals + fixed temperature — never a win on noise). Ships a zero-dependency eval harness; no promptfoo/DeepEval/RAGAS needed."
+    },
+    {
+      "name": "ui-verify",
+      "source": "./skills/ui-verify",
+      "description": "Prove a deployed web UI actually WORKS, not just loads — 'deployed ≠ working'. Asserts a verification ladder (loads → renders real content → wired to backend → functional end-to-end): semantic content oracles, console + network fail-gates (incl. wrong-endpoint detection), SSE streaming verification, visual baseline diff, axe a11y — with deterministic waits + retry-quorum so a pass means a pass, and a structured evidence report. Ships a zero-dependency CDP driver (Node 22 + Chrome, no npm/Playwright); also uses the chrome-devtools MCP or Playwright when present."
+    },
+    {
+      "name": "debug",
+      "source": "./skills/debug",
+      "description": "Find the ROOT CAUSE of a failure by disciplined hypothesis-and-falsification with shipped instrumentation — never fix before you understand. Distributed-systems-aware (containers/LB/cross-VCN/IAM eventual-consistency/shared resources): reproduce → observe → hypothesize → falsify by toggling → bisect → confirm → prove the fix → regression-guard, with a Confirmed-vs-Suspected gate (correlation ≠ cause) and a localization decision tree. Ships a zero-dependency boundary tracer (DNS/TCP/TLS/HTTP/auth/content probes + working-vs-failing differential)."
     }
   ]
 }

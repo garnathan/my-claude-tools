@@ -70,6 +70,14 @@ Every bug already fixed in this codebase is a *template* for an un-fixed sibling
 - For each past bug, extract the *class* ("a filter wasn't tenant-prefixed", "a retried webhook double-fired", "a shared rule got clobbered by a sibling deploy", "an SSE stream wasn't closed on unmount") and **grep/probe for the same class everywhere else** it could occur.
 - Bugs cluster. The team's past mistakes predict its present ones. A skill that ignores the repo's own scar tissue is leaving the easiest wins on the table.
 
+**Generalize the seed with the abstraction ladder, then sweep** (Trail of Bits' variant-analysis method). A seed bug is one *instance*; to find its siblings, climb one rung at a time, tracking the false-positive rate, and stop when FP exceeds ~50%:
+- **L0 — exact match:** the literal buggy pattern (same call, same names). Highest precision; finds copy-paste clones.
+- **L1 — variable abstraction:** replace the specific identifiers/literals (any variable, any string) — finds the same bug under different names.
+- **L2 — structural:** match the *shape* regardless of names (the call sequence / control-flow skeleton) — finds re-implementations.
+- **L3 — semantic / taint:** match the *dataflow* (an untrusted source reaching the same sink kind) — finds the class, not the form.
+
+Express the generalized pattern as a **Semgrep rule** (or a CodeQL taint query for L3 — `detection-toolkit.md §5`), run it across the repo, and feed every hit into the prove-impact gate (R1). This is the bridge: O6 gives you *where to look* (the repo's own scar tissue), the ladder gives you *how to generalize it into a query*, and the static-analysis sweep gives you *reach across the whole codebase* — then you prove each hit. Track the FP rate per rung in the ledger; a rung that's mostly noise has over-generalized — drop back a level.
+
 ---
 
 # Part 2 — Hunt rigor (trustworthy findings, complete coverage)

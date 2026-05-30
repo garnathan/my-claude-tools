@@ -36,15 +36,15 @@ Per `oracle-methods.md` Part 1, derive — and write down — the things that mu
 - **Metamorphic relations** (O2): 3–5 per non-deterministic endpoint (search/rank/aggregate/LLM).
 - **Differential pairs** (O3): replica A/B, old/new build, v1/v2, cached/uncached, UI/API, profile/profile, doc/behaviour.
 - **State-machine sequences** (O4): the lifecycle operations and their illegal edges.
-- **Variant seeds** (O6): mine the project's own incident history (`git log --grep=fix`, CHANGELOG, memory/post-mortems, closed bugs) → each past bug is a template to hunt elsewhere. **This is the highest-yield, most-skipped step.**
+- **Variant seeds** (O6): mine the project's own incident history (`git log --grep=fix`, CHANGELOG, memory/post-mortems, closed bugs) → each past bug is a template to hunt elsewhere. **This is the highest-yield, most-skipped step.** Then **generalize each seed up the abstraction ladder** (L0 exact → L1 variables → L2 structural → L3 taint), turn it into a Semgrep/CodeQL query, sweep the whole repo, and prove the hits (O6 + detection-toolkit §5).
 
 ## Phase 2 — Cheap broad sweep
 
-Highest yield per minute, so early signal shapes the deep dive: console+network sweep of every page; typecheck + lint + dependency/CVE audit; static footgun grep (empty catches, unsafe render, no-timeout clients, devDep imports, secrets, broad excepts); health + "deployed ≠ working" content probe; security/quality scanner (triaged hard). Mark the ledger as you go.
+Highest yield per minute, so early signal shapes the deep dive: console+network sweep of every page; typecheck + lint + dependency/CVE audit; static footgun grep (empty catches, unsafe render, no-timeout clients, devDep imports, secrets, broad excepts); health + "deployed ≠ working" content probe; **static-analysis taint sweep** (Semgrep/CodeQL — interprocedural source→sink, a recon multiplier whose hits are *candidates* feeding the prove stage; toolkit §5, triaged hard). Mark the ledger as you go.
 
 ## Phase 3 — Static + dataflow
 
-Walk the code for the applicable classes you can see without running anything (missing tenant predicates, swallowed errors, missing timeouts, CAS-less RMW, per-replica state, unsafe rendering, excessive agency). For any injection/SSRF/traversal candidate, **trace source→sink** (oracle-methods R4) before it counts — untraced = Suspected at best.
+Walk the code for the applicable classes you can see without running anything (missing tenant predicates, swallowed errors, missing timeouts, CAS-less RMW, per-replica state, unsafe rendering, excessive agency). **Every candidate from the Phase-2 taint sweep (Semgrep/CodeQL) lands here**: for any injection/SSRF/traversal candidate, **trace source→sink** (oracle-methods R4) before it counts — untraced (incl. an unproven scanner hit) = Suspected at best.
 
 ## Phase 4 — Runtime / behavioural
 

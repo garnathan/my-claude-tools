@@ -1,12 +1,12 @@
 {
-  "name": "claude-skills",
+  "name": "my-claude-tools",
   "owner": {
     "name": "Gareth Nathan",
-    "url": "https://github.com/garnathan/claude-skills"
+    "url": "https://github.com/garnathan/my-claude-tools"
   },
   "metadata": {
-    "description": "Personal, application-agnostic Claude Code skills.",
-    "version": "0.1.0"
+    "description": "Personal, application-agnostic Claude Code skills + plugins.",
+    "version": "0.2.0"
   },
   "plugins": [
     {
@@ -43,6 +43,41 @@
       "name": "debug",
       "source": "./skills/debug",
       "description": "Find the ROOT CAUSE of a failure by disciplined hypothesis-and-falsification with shipped instrumentation — never fix before you understand. Distributed-systems-aware (containers/LB/cross-VCN/IAM eventual-consistency/shared resources): reproduce → observe → hypothesize → falsify by toggling → bisect → confirm → prove the fix → regression-guard, with a Confirmed-vs-Suspected gate (correlation ≠ cause) and a localization decision tree. Ships a zero-dependency boundary tracer (DNS/TCP/TLS/HTTP/auth/content probes + working-vs-failing differential)."
+    },
+    {
+      "name": "worktree-isolation",
+      "source": "./skills/worktree-isolation",
+      "description": "Advisory standard. The primary clone is a coordination point, not a workspace — isolate every line of work (yours and agents') in its own git worktree so parallel lines never collide. Fires when a change is about to land while other work is in flight, in a repo with live worktrees, or when dispatching agents that write to the tree."
+    },
+    {
+      "name": "project-structure",
+      "source": "./skills/project-structure",
+      "description": "Advisory standard. How a repo is laid out and how files/modules are named, so every project looks the same and generated code has one obvious home — colocate by feature, one-module-one-responsibility, no utils/misc junk drawers. The judgment-layer counter to AI-slop sprawl that linters can't catch. Reference layouts for Python/TS/Rust."
+    },
+    {
+      "name": "github-api-discipline",
+      "source": "./skills/github-api-discipline",
+      "description": "Advisory standard + shipped reference impl. When build/deploy code reads files from another GitHub repo at runtime: one bulk zipball fetch per repo (not per-file /contents), honor rate-limit headers, share fetched content, use an App token not a PAT. Keeps you under the 15000/hr installation limit. Ships a drop-in zipball fetcher + backoff helper."
+    },
+    {
+      "name": "quality-verify-hook",
+      "source": "./skills/quality-verify-hook",
+      "description": "Prove a project's static-analysis git hooks actually fire on bad code — works with lefthook or the pre-commit framework. Stages a known-bad fixture and asserts non-zero exit; stages a known-good fixture and asserts zero. Catches the silently-misconfigured-hook class ('hook silence ≠ hook working'). Ships a zero-dependency, self-locating Python verifier + fixtures."
+    },
+    {
+      "name": "quality-stack-setup",
+      "source": "./skills/quality-stack-setup",
+      "description": "Wire a repo's lint/static-analysis/test stack so local checks and CI can't drift: lefthook git hooks (pre-commit auto-fixers + pre-push full verify) calling a justfile that is the single source of truth CI also runs. Language-agnostic (ruff/skylos · prettier/eslint/fallow · clippy/rustfmt) and CI-agnostic — ships both a GitHub Actions and a Bitbucket Pipelines backstop."
+    },
+    {
+      "name": "suppression-discipline",
+      "source": "./skills/suppression-discipline",
+      "description": "Advisory standard. Every static-analysis suppression — # skylos: ignore, # noqa, # type: ignore, // eslint-disable, @ts-expect-error, #[allow(...)], //nolint — must carry an inline rationale; a bare suppression is a quality failure to fix, and --no-verify / LEFTHOOK=0 is never the answer to a finding. Fires when an ignore is added/proposed or hooks are bypassed."
+    },
+    {
+      "name": "feature-workflow",
+      "source": "./feature-workflow",
+      "description": "Directory-based feature lifecycle: capture (idea.md) → plan → ship (shipped.md), with status by file-presence, an orthogonal state overlay (active/paused/replaced/abandoned), epics, a dependency graph, and an auto-generated DASHBOARD.md (PostToolUse hook). Reviews run through a provider-agnostic channel — a local Claude subagent by default (no CI, no API keys), or GitHub / Bitbucket PRs, or none. Adapted from Court Schuett's feature-workflow; engine ported intact (146 tests), GitHub-CI review path replaced by a pluggable seam."
     }
   ]
 }

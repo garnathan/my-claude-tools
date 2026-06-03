@@ -1,0 +1,47 @@
+# Bitbucket Pipelines CI — the UNBYPASSABLE BACKSTOP. Copy to bitbucket-pipelines.yml
+# at the repo root. The Bitbucket-side equivalent of ci-github.yml.
+#
+# Parity by construction: every path runs `just verify` — the EXACT recipe the
+# pre-push git hook runs (see lefthook.yml + justfile). Same commands, same
+# project-pinned tools → if it passed locally on push, it passes here.
+#
+# Make it actually unbypassable: in Repository settings → Branch restrictions,
+# require this pipeline to pass before merge on `dev` and `main` (or a merge
+# check). A local hook can be skipped (--no-verify); a required merge check cannot.
+#
+# CUSTOMIZE:
+#  - Shows a Node image + just. For Python add `pip install uv` (or a uv image)
+#    and `uv sync`; for Rust use a `rust:latest` image. `just verify` runs each
+#    language's tools when its manifest is present.
+#  - The install step shells in `just` via the prebuilt binary; swap for your
+#    base image's package manager if you prefer.
+
+image: node:22
+
+definitions:
+  steps:
+    - step: &verify
+        name: Verify (format-check + lint + typecheck + test + coverage)
+        caches:
+          - node
+        script:
+          # Install just (single static binary) into the step.
+          - curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/bin
+          - corepack enable && corepack prepare pnpm@10 --activate
+          - pnpm install --frozen-lockfile
+          # Python: - pip install uv && uv sync --frozen
+          # The single source of truth — identical to the pre-push hook.
+          - just verify
+          - pnpm -r build   # build runs in CI only; drop if nothing to build
+
+pipelines:
+  # PRs into any branch — the gate developers see before merge.
+  pull-requests:
+    '**':
+      - step: *verify
+  # Keep a fresh status on the protected branches.
+  branches:
+    dev:
+      - step: *verify
+    main:
+      - step: *verify

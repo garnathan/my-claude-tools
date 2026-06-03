@@ -11,6 +11,11 @@ Thumbs.db
 .claude/settings.local.json
 .claude/worktrees/
 
+# Python (feature-workflow engine + tests)
+__pycache__/
+*.pyc
+.pytest_cache/
+
 # Scratch
 /tmp/
 *.log

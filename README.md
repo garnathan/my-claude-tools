@@ -1,8 +1,8 @@
-# claude-skills
+# my-claude-tools
 
-Personal, reusable [Claude Code](https://claude.com/claude-code) skills — application-agnostic, version-controlled, and loadable from this repo.
+Personal, reusable [Claude Code](https://claude.com/claude-code) skills **and plugins** — application-agnostic, version-controlled, and loadable from this repo. Three groups: **flagship workflow skills** (below), **engineering standards & quality** skills, and the **feature-workflow** plugin.
 
-## Skills
+## Flagship workflow skills
 
 | Skill | What it does |
 |---|---|
@@ -14,13 +14,43 @@ Personal, reusable [Claude Code](https://claude.com/claude-code) skills — appl
 | **`/ui-verify`** | Prove a deployed web UI actually **works**, not just loads — *"deployed ≠ working"*. Asserts a ladder (L0 loads → L1 renders real content → L2 wired to backend → L3 functional/streaming): **semantic content oracles**, **console + network fail-gates** (incl. wrong-endpoint detection), **SSE** streaming verification, visual baseline diff, axe a11y — with deterministic waits + **retry-quorum** so a pass means a pass, and a **structured evidence report**. Ships a **zero-dependency CDP driver** (Node 22 + Chrome, no npm/Playwright); also uses the chrome-devtools MCP or Playwright when present. Litmus: catch a 200-but-broken page an HTTP/screenshot check misses. |
 | **`/debug`** | Find the **root cause** of a failure by disciplined hypothesis-and-falsification with shipped instrumentation — never fix before you understand. Distributed-systems-aware (containers/LB/cross-VCN/IAM eventual-consistency/shared resources): reproduce → observe → hypothesize → **falsify by toggling** → bisect → confirm → prove the fix → regression-guard, with a **Confirmed-vs-Suspected gate** (correlation ≠ cause) + a localization **decision tree**. Ships a **zero-dependency boundary tracer** (DNS/TCP/TLS/HTTP/auth/content probes + **working-vs-failing differential**). Litmus: localize a failure to its first divergent boundary + confirm by toggling, without shotgun-changing anything. |
 
+## Engineering standards & quality
+
+Adapted (polish-only) from [Court Schuett's claude-code-plugins](https://github.com/schuettc/claude-code-plugins). The three **standards** are advisory — they fire on the situation, no command to invoke. The two **quality** skills are invocable; **suppression-discipline** is advisory.
+
+| Skill | What it does |
+|---|---|
+| **worktree-isolation** *(advisory)* | The primary clone is a coordination point, not a workspace — isolate every line of work (yours and agents') in its own git worktree so parallel lines never collide. Fires when a change is about to land while other work is in flight, or when dispatching agents that write to the tree. |
+| **project-structure** *(advisory)* | One repo shape so every project is navigable on sight and generated code has one obvious home — colocate by feature, one-module-one-responsibility, no `utils`/`misc` junk drawers. Reference layouts for Python/TS/Rust. The judgment-layer counter to AI-slop sprawl linters can't catch. |
+| **github-api-discipline** *(advisory + asset)* | When build/deploy code reads files from another GitHub repo at runtime: one bulk zipball fetch per repo (not per-file `/contents`), honor rate-limit headers, App token not PAT. Keeps you under the 15000/hr installation cap. Ships a drop-in zipball fetcher + backoff helper. |
+| **`/quality-verify-hook`** | Prove a project's static-analysis git hooks actually fire on bad code (lefthook or pre-commit). Stage a known-bad fixture → assert non-zero exit; known-good → assert zero. Catches the silently-misconfigured-hook class ("hook silence ≠ hook working"). Ships a zero-dependency, self-locating Python verifier + fixtures. |
+| **`/quality-stack-setup`** | Wire lint/static-analysis/test so local and CI can't drift: lefthook hooks calling a `justfile` that is the single source of truth CI also runs. Language-agnostic (ruff/skylos · prettier/eslint/fallow · clippy/rustfmt) and CI-agnostic — ships **both** a GitHub Actions and a Bitbucket Pipelines backstop. |
+| **suppression-discipline** *(advisory)* | Every static-analysis suppression (`# noqa`, `# type: ignore`, `// eslint-disable`, `@ts-expect-error`, `#[allow(...)]`, …) must carry an inline rationale; a bare suppression is a quality failure, and `--no-verify` is never the answer to a finding. |
+
+## Plugins
+
+| Plugin | What it does |
+|---|---|
+| **feature-workflow** | Directory-based feature lifecycle: capture (`idea.md`) → plan → ship (`shipped.md`), status by file-presence, an orthogonal state overlay (active/paused/replaced/abandoned), epics, a dependency graph, and an auto-generated `DASHBOARD.md`. Reviews run through a **provider-agnostic channel** — a local Claude subagent by default (no CI, no API keys), or GitHub / Bitbucket PRs, or none. Adapted from Court Schuett's feature-workflow: engine ported intact (146 tests pass), the GitHub-CI review path replaced by a pluggable seam. See [feature-workflow/README.md](feature-workflow/README.md). |
+
 ## Layout
 
 ```
-claude-skills/
+my-claude-tools/
 ├── .claude-plugin/
 │   └── marketplace.json        # lets this repo be added via `/plugin marketplace add`
+├── feature-workflow/           # PLUGIN (multi-skill + hooks) — see feature-workflow/README.md
+│   ├── .claude-plugin/plugin.json
+│   ├── hooks/                  # PreToolUse (block dashboard edits) + PostToolUse (regen + sync)
+│   ├── templates/              # review-prompt-{plan,impl}.md (the review rubric)
+│   └── skills/                 # feature-*, guarding-scope/tracking-progress/checking-backlog, shared/{lib,tests}
 ├── skills/
+│   ├── worktree-isolation/SKILL.md       # advisory standard
+│   ├── project-structure/SKILL.md        # advisory standard
+│   ├── github-api-discipline/            # advisory + assets/ (zipball fetcher + backoff)
+│   ├── quality-verify-hook/              # SKILL.md + assets/ (verify_hook.py + fixtures/)
+│   ├── quality-stack-setup/              # SKILL.md + assets/ (justfile, lefthook.yml, ci-github.yml, bitbucket-pipelines.yml)
+│   ├── suppression-discipline/SKILL.md   # advisory standard
 │   ├── bug-hunt/
 │   │   ├── SKILL.md            # orchestration: recon → oracles → fan-out → prove → self-critique → report
 │   │   ├── bug-taxonomy.md     # ~180 known bug classes → detection probe
@@ -70,13 +100,14 @@ Two supported paths:
 ln -s "$PWD/skills/bug-hunt" ~/.claude/skills/bug-hunt
 ```
 
-The source of truth stays in this git repo; the symlink just points Claude at it. Edit here, commit here.
+The source of truth stays in this git repo; the symlink just points Claude at it. Edit here, commit here. (This works for the single-skill dirs under `skills/`. The **feature-workflow** plugin ships hooks, so load it as a plugin — path 2 — rather than symlinking, so the PreToolUse/PostToolUse hooks register.)
 
 **2. As a plugin marketplace (shareable).** Add the repo as a marketplace, then install:
 
 ```
-/plugin marketplace add garnathan/claude-skills
-/plugin install bug-hunt@claude-skills
+/plugin marketplace add garnathan/my-claude-tools
+/plugin install bug-hunt@my-claude-tools
+/plugin install feature-workflow@my-claude-tools
 ```
 
 ## Adding a new skill

@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>OASE AI Training — Context Folders</title>
+<template id="__bundler_thumbnail" data-bg-color="#11141C">
+  <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+    <rect width="1200" height="800" fill="#11141C"/>
+    <g transform="translate(180, 220)">
+      <rect x="0"   y="0" width="190" height="360" rx="24" fill="#1A1F2B" stroke="#E8B547" stroke-width="6"/>
+      <rect x="220" y="0" width="190" height="360" rx="24" fill="#1A1F2B" stroke="#8BC07A" stroke-width="6"/>
+      <rect x="440" y="0" width="190" height="360" rx="24" fill="#1A1F2B" stroke="#7FB7D9" stroke-width="6"/>
+      <rect x="660" y="0" width="190" height="360" rx="24" fill="#1A1F2B" stroke="#E06464" stroke-width="6" stroke-dasharray="12 8"/>
+    </g>
+    <text x="600" y="680" text-anchor="middle" font-family="Georgia, serif" font-style="italic" font-size="56" fill="#E8B547">Pack the pup's bag like a budget</text>
+  </svg>
+</template>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;0,6..72,700;1,6..72,400;1,6..72,600&family=Manrope:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #11141C;
+    --bg-2: #1A1F2B;
+    --surface: #1E2531;
+    --line: #2B3343;
+    --fg: #F0E7D6;
+    --fg-soft: #C8C0AE;
+    --fg-faint: #8088A0;
+    --gold: #E8B547;
+    --terracotta: #C97064;
+    --sage: #7FB7D9;
+    --green: #8BC07A;
+    --alert: #E06464;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: #05070b;
+    font-family: 'Manrope', system-ui, sans-serif;
+    color: var(--fg);
+    overflow: hidden;
+  }
+  .stage {
+    position: fixed; inset: 0;
+    overflow: hidden;
+  }
+  .frame {
+    width: 1920px; height: 1080px;
+    background: var(--bg);
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    transform-origin: center center;
+    overflow: hidden;
+  }
+  .frame::before {
+    content: "";
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(to right, rgba(255,255,255,0.025) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255,255,255,0.025) 1px, transparent 1px);
+    background-size: 80px 80px;
+    pointer-events: none;
+  }
+  .frame::after {
+    content: "";
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse at 20% 0%, rgba(232,181,71,0.06), transparent 50%),
+      radial-gradient(ellipse at 100% 100%, rgba(224,100,100,0.05), transparent 55%);
+    pointer-events: none;
+  }
+
+  /* ============ HEADER ============ */
+  .header {
+    position: absolute;
+    top: 38px; left: 56px; right: 56px;
+    display: flex; align-items: flex-end; justify-content: space-between;
+    gap: 40px;
+    z-index: 2;
+  }
+  .title {
+    font-family: 'Newsreader', serif;
+    font-weight: 400;
+    font-size: 76px;
+    line-height: 0.98;
+    color: var(--fg);
+    letter-spacing: -1.5px;
+    margin: 0;
+    white-space: nowrap;
+  }
+  .title em { font-style: italic; color: var(--gold); font-weight: 400; }
+  .subtitle {
+    font-size: 19px;
+    color: var(--fg-soft);
+    margin: 10px 0 0;
+    max-width: 1120px;
+    line-height: 1.45;
+  }
+  .subtitle b { color: var(--fg); font-weight: 600; }
+  .header-right {
+    text-align: right;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 2.5px;
+    text-transform: uppercase;
+    color: var(--fg-faint);
+    line-height: 1.7;
+    flex-shrink: 0;
+  }
+  .header-right .big {
+    display: block;
+    font-family: 'Newsreader', serif;
+    font-style: italic;
+    font-size: 32px;
+    font-weight: 400;
+    color: var(--fg);
+    letter-spacing: 0;
+    text-transform: none;
+    margin-top: 4px;
+    white-space: nowrap;
+  }
+  .header-right .big .accent { color: var(--gold); font-style: italic; }
+
+  /* ============ BOARD — 4 tiers ============ */
+  .board {
+    position: absolute;
+    top: 218px; left: 56px; right: 56px;
+    height: 410px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 22px;
+    z-index: 2;
+  }
+  .tier {
+    position: relative;
+    display: flex; flex-direction: column;
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    border-top: 4px solid var(--gold);
+    border-radius: 14px;
+    padding: 24px 26px 26px;
+    overflow: hidden;
+  }
+  .tier.t-2 { border-top-color: var(--green); }
+  .tier.t-3 { border-top-color: var(--sage); }
+  .tier.t-4 {
+    border-top: 4px dashed var(--alert);
+    border-color: rgba(224,100,100,0.35);
+    background:
+      repeating-linear-gradient(
+        135deg,
+        rgba(224,100,100,0.045) 0 10px,
+        transparent 10px 22px
+      ),
+      var(--bg-2);
+  }
+
+  .tier-head {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 6px;
+  }
+  .tier-num {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: var(--gold);
+    color: var(--bg);
+    display: grid; place-items: center;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .tier.t-2 .tier-num { background: var(--green); color: var(--bg); }
+  .tier.t-3 .tier-num { background: var(--sage); color: var(--bg); }
+  .tier.t-4 .tier-num { background: var(--alert); color: var(--bg); }
+  .tier-eyebrow {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 2.5px;
+    text-transform: uppercase;
+    color: var(--fg-faint);
+  }
+  .tier-title {
+    font-family: 'Newsreader', serif;
+    font-weight: 400;
+    font-size: 48px;
+    line-height: 1.02;
+    color: var(--fg);
+    letter-spacing: -0.9px;
+    margin: 4px 0 10px;
+  }
+  .tier-title em { font-style: italic; color: var(--gold); }
+  .tier.t-2 .tier-title em { color: var(--green); }
+  .tier.t-3 .tier-title em { color: var(--sage); }
+  .tier.t-4 .tier-title em { color: var(--alert); }
+
+  .loaded-pill {
+    display: inline-flex; align-items: center; gap: 8px;
+    align-self: flex-start;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 6px 13px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 16px;
+  }
+  .loaded-pill .pill-dot {
+    width: 7px; height: 7px;
+    background: var(--gold);
+    border-radius: 50%;
+    box-shadow: 0 0 8px rgba(232,181,71,0.7);
+  }
+  .tier.t-2 .loaded-pill { color: var(--green); }
+  .tier.t-2 .loaded-pill .pill-dot { background: var(--green); box-shadow: 0 0 8px rgba(139,192,122,0.7); }
+  .tier.t-3 .loaded-pill { color: var(--sage); }
+  .tier.t-3 .loaded-pill .pill-dot { background: var(--sage); box-shadow: 0 0 8px rgba(127,183,217,0.7); }
+  .tier.t-4 .loaded-pill { color: var(--alert); border-color: rgba(224,100,100,0.35); }
+  .tier.t-4 .loaded-pill .pill-dot { background: var(--alert); box-shadow: 0 0 8px rgba(224,100,100,0.7); }
+
+  @keyframes pill-pulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50%      { transform: scale(1.4); opacity: 0.55; }
+  }
+  .tier.always .pill-dot { animation: pill-pulse 1.8s ease-in-out infinite; }
+
+  @keyframes pill-blink {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.35; }
+  }
+  .tier.t-4 .pill-dot { animation: pill-blink 0.9s ease-in-out infinite; }
+
+  .paths {
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 14px 12px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: var(--fg-soft);
+    margin-bottom: 16px;
+    position: relative;
+  }
+  .paths::before {
+    content: "WHERE";
+    position: absolute;
+    top: -7px; left: 10px;
+    background: var(--bg-2);
+    padding: 0 6px;
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: var(--fg-faint);
+    font-weight: 600;
+  }
+  .tier.t-4 .paths { border-color: rgba(224,100,100,0.25); }
+  .tier.t-4 .paths::before {
+    content: "WHAT HAPPENS";
+    background: var(--bg-2);
+    color: var(--alert);
+  }
+  .paths .row {
+    display: flex; align-items: baseline; gap: 8px;
+    padding: 1px 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .paths .row .vendor {
+    display: inline-block;
+    width: 46px;
+    flex-shrink: 0;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--fg-faint);
+  }
+  .paths .row .vendor.dim2 { color: rgba(128,136,160,0.5); }
+  .paths .row .file { color: var(--gold); font-weight: 600; }
+  .paths .row .plus { color: var(--fg-faint); margin: 0 2px; }
+  .tier.t-2 .paths .row .file { color: var(--green); }
+  .tier.t-3 .paths .row .file { color: var(--sage); }
+  .tier.t-4 .paths .row .file { color: var(--alert); }
+
+  .tier-summary {
+    font-size: 18px;
+    line-height: 1.5;
+    color: var(--fg-soft);
+    flex: 1;
+  }
+  .tier-summary b { color: var(--gold); font-weight: 600; }
+  .tier.t-2 .tier-summary b { color: var(--green); }
+  .tier.t-3 .tier-summary b { color: var(--sage); }
+  .tier.t-4 .tier-summary b { color: var(--alert); }
+
+  /* ============ RULES STRIP ============ */
+  .rules {
+    position: absolute;
+    top: 808px; left: 56px; right: 56px;
+    height: 250px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 22px;
+    z-index: 2;
+  }
+  .rule {
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 20px 22px 20px;
+    display: flex; flex-direction: column;
+    gap: 8px;
+    position: relative;
+  }
+  .rule .rn {
+    position: absolute;
+    top: 12px; right: 16px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--fg-faint);
+    letter-spacing: 1.5px;
+  }
+  .rule h3 {
+    font-family: 'Newsreader', serif;
+    font-weight: 400;
+    font-style: italic;
+    font-size: 36px;
+    line-height: 1.1;
+    color: var(--gold);
+    margin: 0;
+    letter-spacing: -0.3px;
+  }
+  .rule p {
+    font-size: 18px;
+    line-height: 1.45;
+    color: var(--fg-soft);
+    margin: 0;
+  }
+  .rule p b { color: var(--fg); font-weight: 600; }
+
+  /* ============ DIAGNOSTIC ============ */
+  .diagnostic {
+    position: absolute;
+    top: 648px; left: 56px; right: 56px;
+    height: 138px;
+    display: grid;
+    grid-template-columns: 1.05fr 2fr;
+    gap: 32px;
+    align-items: center;
+    padding: 0 32px;
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    z-index: 2;
+  }
+  .diag-left { display: flex; flex-direction: column; gap: 4px; }
+  .diag-eye {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 2.5px;
+    text-transform: uppercase;
+    color: var(--gold);
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .diag-eye .dot {
+    width: 6px; height: 6px;
+    background: var(--gold);
+    border-radius: 50%;
+  }
+  .diag-q {
+    font-family: 'Newsreader', serif;
+    font-style: italic;
+    font-size: 31px;
+    line-height: 1.15;
+    color: var(--fg);
+    margin: 0;
+  }
+  .diag-q em { color: var(--gold); }
+  .answers {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+  .ans {
+    display: flex; flex-direction: column;
+    gap: 4px;
+    padding: 11px 16px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--gold);
+    border-radius: 8px;
+  }
+  .ans.a-2 { border-left-color: var(--green); }
+  .ans.a-3 { border-left-color: var(--sage); }
+  .ans .a-q {
+    font-family: 'Newsreader', serif;
+    font-style: italic;
+    font-size: 20px;
+    color: var(--fg);
+    line-height: 1.2;
+  }
+  .ans .a-t {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--gold);
+  }
+  .ans.a-2 .a-t { color: var(--green); }
+  .ans.a-3 .a-t { color: var(--sage); }
+
+  /* ============ BOTTOM: VENDOR MATRIX ============ */
+  .bottom {
+    position: absolute;
+    top: 820px; left: 80px; right: 80px;
+    height: 210px;
+    z-index: 2;
+  }
+  .matrix {
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 16px 22px 16px;
+    display: flex; flex-direction: column;
+    gap: 12px;
+    height: 100%;
+  }
+  .matrix-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 12px;
+  }
+  .matrix-eye {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 2.5px;
+    text-transform: uppercase;
+    color: var(--fg-faint);
+  }
+  .matrix-title {
+    font-family: 'Newsreader', serif;
+    font-style: italic;
+    font-size: 23px;
+    line-height: 1;
+    color: var(--fg);
+    margin: 0;
+  }
+  .matrix-title em { color: var(--gold); }
+  .grid {
+    display: grid;
+    grid-template-columns: 220px 1.3fr 1.5fr 1.3fr;
+    column-gap: 22px;
+    row-gap: 8px;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  .grid .col-h {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--fg-faint);
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 6px;
+    margin-bottom: 2px;
+  }
+  .grid .tool {
+    font-family: 'Manrope', sans-serif;
+    font-weight: 700;
+    color: var(--fg);
+    font-size: 15px;
+  }
+  .grid .tool.claude { color: var(--gold); }
+  .grid .tool.codex { color: var(--sage); }
+  .grid .cell {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--fg-soft);
+    line-height: 1.45;
+  }
+  .grid .cell b { color: var(--fg); font-weight: 600; }
+  .grid .cell em {
+    font-family: 'Manrope', sans-serif;
+    font-style: normal;
+    font-size: 12px;
+    color: var(--fg-faint);
+  }
+
+  /* ============ CLOSING ============ */
+  .closing {
+    position: absolute;
+    bottom: 22px; left: 80px; right: 80px;
+    text-align: center;
+    font-family: 'Newsreader', serif;
+    font-style: italic;
+    font-size: 18px;
+    color: var(--fg-faint);
+    z-index: 2;
+  }
+  .closing em { color: var(--gold); font-style: italic; }
+
+  /* staggered entry */
+  @keyframes el-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .tier, .rule {
+    opacity: 1;
+    animation: el-in 0.7s ease-out forwards;
+  }
+  .tier:nth-child(1) { animation-delay: 0.05s; }
+  .tier:nth-child(2) { animation-delay: 0.12s; }
+  .tier:nth-child(3) { animation-delay: 0.19s; }
+  .tier:nth-child(4) { animation-delay: 0.26s; }
+  .rule:nth-child(1) { animation-delay: 0.34s; }
+  .rule:nth-child(2) { animation-delay: 0.40s; }
+  .rule:nth-child(3) { animation-delay: 0.46s; }
+  .rule:nth-child(4) { animation-delay: 0.52s; }
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="frame">
+
+    <!-- ============ HEADER ============ -->
+    <div class="header">
+      <div>
+        <h1 class="title">Pack the pup's bag like <em>a budget.</em></h1>
+        <p class="subtitle">Every toy the pup carries adds weight to <b>every</b> walk. There are four places to put things — <b>on the collar</b> (always worn), <b>in the bag</b> (today's walk), <b>in the toy bin</b> (left at home), and <b>off to the shop</b> (the costly one to avoid).</p>
+      </div>
+      <div class="header-right">
+        Storing context for your agent
+        <span class="big">Four <span class="accent">places</span></span>
+      </div>
+    </div>
+
+    <!-- ============ BOARD — 4 tiers ============ -->
+    <div class="board">
+
+      <!-- TIER 1 -->
+      <div class="tier always">
+        <div class="tier-head">
+          <div class="tier-num">1</div>
+          <div class="tier-eyebrow">On the collar</div>
+        </div>
+        <h2 class="tier-title">On the <em>collar</em></h2>
+        <div class="loaded-pill"><span class="pill-dot"></span> Always worn</div>
+
+        <div class="paths">
+          <div class="row"><span class="vendor">claude</span><span class="file">~/.claude/CLAUDE.md</span></div>
+          <div class="row"><span class="vendor">codex</span><span class="file">~/.codex/AGENTS.md</span></div>
+          <div class="row"><span class="vendor dim2">+</span><span class="file">&lt;project&gt;/CLAUDE.md · AGENTS.md</span></div>
+        </div>
+
+        <div class="tier-summary">
+          The pup's <b>name tag &amp; ground rules</b>. Manners, hard limits, and which bin to look in when. Always there — so keep it small.
+        </div>
+      </div>
+
+      <!-- TIER 2 -->
+      <div class="tier always t-2">
+        <div class="tier-head">
+          <div class="tier-num">2</div>
+          <div class="tier-eyebrow">In the bag</div>
+        </div>
+        <h2 class="tier-title">In the <em>bag</em></h2>
+        <div class="loaded-pill"><span class="pill-dot"></span> Packed today</div>
+
+        <div class="paths">
+          <div class="row"><span class="vendor">claude</span><span class="file">~/.claude/projects/&lt;you&gt;/memory/MEMORY.md</span></div>
+          <div class="row"><span class="vendor">codex</span><span class="file">$CODEX_HOME/memories/chronicle/</span></div>
+        </div>
+
+        <div class="tier-summary">
+          What you grab <b>for today's walk</b> — current project, owners, blockers, and one-line pointers to anything in the toy bin.
+        </div>
+      </div>
+
+      <!-- TIER 3 -->
+      <div class="tier t-3">
+        <div class="tier-head">
+          <div class="tier-num">3</div>
+          <div class="tier-eyebrow">In the toy bin</div>
+        </div>
+        <h2 class="tier-title">In the <em>toy bin</em></h2>
+        <div class="loaded-pill"><span class="pill-dot"></span> Fetched on demand</div>
+
+        <div class="paths">
+          <div class="row"><span class="vendor dim2">any</span><span class="file">&lt;topic&gt;.md</span></div>
+          <div class="row"><span class="vendor dim2">any</span><span class="file">Context/  ·  Infrequent-Context/</span></div>
+        </div>
+
+        <div class="tier-summary">
+          <b>Catalogues, runbooks, examples, postmortems</b> — the deep stuff. The pup digs through the bin only when you ask it to.
+        </div>
+      </div>
+
+      <!-- TIER 4 — anti-pattern -->
+      <div class="tier t-4">
+        <div class="tier-head">
+          <div class="tier-num">4</div>
+          <div class="tier-eyebrow">Off to the shop · avoid</div>
+        </div>
+        <h2 class="tier-title">At the <em>shop</em></h2>
+        <div class="loaded-pill"><span class="pill-dot"></span> Paid every visit</div>
+
+        <div class="paths">
+          <div class="row"><span class="vendor dim2">live</span><span class="file">web search · same query</span></div>
+          <div class="row"><span class="vendor dim2">live</span><span class="file">API lookup · same data</span></div>
+        </div>
+
+        <div class="tier-summary">
+          When the pup <b>buys the same toy every walk</b> — repeating the same web search or lookup for stuff you reach for often. <b>Cache it</b> in the bag or the toy bin instead.
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ============ FOUR RULES ============ -->
+    <div class="rules">
+      <div class="rule">
+        <span class="rn">01</span>
+        <h3>Stickers, not stories.</h3>
+        <p>One short <b>label</b> per toy. The pup just needs to know <b>what's inside</b> — not the whole story.</p>
+      </div>
+      <div class="rule">
+        <span class="rn">02</span>
+        <h3>Throw out chewed toys.</h3>
+        <p>When something's done, <b>put it away</b>. Don't leave a "this used to be here" note — it still adds weight.</p>
+      </div>
+      <div class="rule">
+        <span class="rn">03</span>
+        <h3>One toy, one home.</h3>
+        <p>Don't keep <b>two copies</b> of the same toy in different bins. Pick one home and point everything else at it.</p>
+      </div>
+      <div class="rule">
+        <span class="rn">04</span>
+        <h3>Fetch when asked.</h3>
+        <p>Don't tell the pup <i>"grab everything from the bin."</i> Say <b>"the bin is over there — fetch only when I ask."</b></p>
+      </div>
+    </div>
+
+    <!-- ============ DIAGNOSTIC ============ -->
+    <div class="diagnostic">
+      <div class="diag-left">
+        <div class="diag-eye"><span class="dot"></span> The diagnostic question</div>
+        <p class="diag-q">"If I never had this loaded, would the next <em>10 conversations</em> go worse?"</p>
+      </div>
+      <div class="answers">
+        <div class="ans">
+          <span class="a-q">Yes, every time</span>
+          <span class="a-t">→ On the collar</span>
+        </div>
+        <div class="ans a-2">
+          <span class="a-q">Yes, on this project</span>
+          <span class="a-t">→ In the bag</span>
+        </div>
+        <div class="ans a-3">
+          <span class="a-q">Only when the topic comes up</span>
+          <span class="a-t">→ In the toy bin</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- closing removed — space reclaimed -->
+
+  </div>
+</div>
+
+<script>
+  (function () {
+    const frame = document.querySelector('.frame');
+    function fit() {
+      const sx = window.innerWidth / 1920;
+      const sy = window.innerHeight / 1080;
+      const s = Math.min(sx, sy);
+      frame.style.transform = 'translate(-50%, -50%) scale(' + s + ')';
+    }
+    window.addEventListener('resize', fit);
+    window.addEventListener('load', fit);
+    fit();
+  })();
+</script>
+</body>
+</html>

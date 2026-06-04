@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>OASE AI Training — From the Living Room to the Dog Park</title>
+<template id="__bundler_thumbnail" data-bg-color="#11141C">
+  <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+    <rect width="1200" height="800" fill="#11141C"/>
+    <g transform="translate(180, 200)">
+      <g>
+        <rect x="0"   y="0"   width="190" height="120" rx="14" fill="#1A1F2B" stroke="#E8B547" stroke-width="4"/>
+        <rect x="220" y="0"   width="190" height="120" rx="14" fill="#1A1F2B" stroke="#8BC07A" stroke-width="4"/>
+        <rect x="440" y="0"   width="190" height="120" rx="14" fill="#1A1F2B" stroke="#7FB7D9" stroke-width="4"/>
+        <rect x="660" y="0"   width="190" height="120" rx="14" fill="#1A1F2B" stroke="#C97064" stroke-width="4"/>
+        <rect x="0"   y="140" width="190" height="120" rx="14" fill="#1A1F2B" stroke="#E8B547" stroke-width="4"/>
+        <rect x="220" y="140" width="190" height="120" rx="14" fill="#1A1F2B" stroke="#8BC07A" stroke-width="4"/>
+        <rect x="440" y="140" width="190" height="120" rx="14" fill="#1A1F2B" stroke="#7FB7D9" stroke-width="4"/>
+        <rect x="660" y="140" width="190" height="120" rx="14" fill="#1A1F2B" stroke="#C97064" stroke-width="4"/>
+        <rect x="0"   y="280" width="190" height="120" rx="14" fill="#1A1F2B" stroke="#E8B547" stroke-width="4"/>
+        <rect x="220" y="280" width="190" height="120" rx="14" fill="#1A1F2B" stroke="#8BC07A" stroke-width="4"/>
+        <rect x="440" y="280" width="190" height="120" rx="14" fill="#1A1F2B" stroke="#7FB7D9" stroke-width="4"/>
+        <rect x="660" y="280" width="190" height="120" rx="14" fill="#1A1F2B" stroke="#C97064" stroke-width="4"/>
+      </g>
+    </g>
+    <text x="600" y="730" text-anchor="middle" font-family="Georgia, serif" font-style="italic" font-size="48" fill="#E8B547">From the living room to the dog park</text>
+  </svg>
+</template>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;0,6..72,700;1,6..72,400;1,6..72,600&family=Manrope:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #11141C;
+    --bg-2: #1A1F2B;
+    --surface: #1E2531;
+    --line: #2B3343;
+    --fg: #F0E7D6;
+    --fg-soft: #C8C0AE;
+    --fg-faint: #8088A0;
+    --gold: #E8B547;
+    --terracotta: #C97064;
+    --sage: #7FB7D9;
+    --green: #8BC07A;
+    --alert: #E06464;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: #05070b;
+    font-family: 'Manrope', system-ui, sans-serif;
+    color: var(--fg);
+    overflow: hidden;
+  }
+  .stage {
+    position: fixed; inset: 0;
+    overflow: hidden;
+  }
+  .frame {
+    width: 1920px; height: 1080px;
+    background: var(--bg);
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    transform-origin: center center;
+    overflow: hidden;
+  }
+  .frame::before {
+    content: "";
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(to right, rgba(255,255,255,0.025) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255,255,255,0.025) 1px, transparent 1px);
+    background-size: 80px 80px;
+    pointer-events: none;
+  }
+  .frame::after {
+    content: "";
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse at 20% 0%, rgba(232,181,71,0.06), transparent 50%),
+      radial-gradient(ellipse at 100% 100%, rgba(201,112,100,0.05), transparent 55%);
+    pointer-events: none;
+  }
+
+  /* ============ HEADER ============ */
+  .header {
+    position: absolute;
+    top: 40px; left: 56px; right: 56px;
+    display: flex; align-items: flex-end; justify-content: space-between;
+    gap: 40px;
+    z-index: 2;
+  }
+  .title {
+    font-family: 'Newsreader', serif;
+    font-weight: 400;
+    font-size: 68px;
+    line-height: 1.0;
+    color: var(--fg);
+    letter-spacing: -1.4px;
+    margin: 0;
+    white-space: nowrap;
+  }
+  .title em { font-style: italic; color: var(--gold); font-weight: 400; }
+  .subtitle {
+    font-size: 22px;
+    color: var(--fg-soft);
+    margin: 12px 0 0;
+    max-width: 1280px;
+    line-height: 1.45;
+  }
+  .subtitle b { color: var(--fg); font-weight: 600; }
+  .header-right {
+    text-align: right;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 2.5px;
+    text-transform: uppercase;
+    color: var(--fg-faint);
+    line-height: 1.7;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+  .header-right .big {
+    display: block;
+    font-family: 'Newsreader', serif;
+    font-style: italic;
+    font-size: 28px;
+    font-weight: 400;
+    color: var(--fg);
+    letter-spacing: 0;
+    text-transform: none;
+    margin-top: 4px;
+    white-space: nowrap;
+  }
+  .header-right .big .accent { color: var(--gold); font-style: italic; }
+
+  /* ============ GRID ============ */
+  .grid {
+    position: absolute;
+    top: 168px; left: 56px; right: 56px; bottom: 28px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: repeat(2, 1fr);
+    gap: 18px;
+    z-index: 2;
+  }
+  .card {
+    position: relative;
+    display: flex; flex-direction: column;
+    background: var(--bg-2);
+    border: 1px solid var(--line);
+    border-top: 4px solid var(--gold);
+    border-radius: 12px;
+    padding: 14px 18px 14px;
+    overflow: hidden;
+  }
+  .card.c-green { border-top-color: var(--green); }
+  .card.c-sage  { border-top-color: var(--sage); }
+  .card.c-terra { border-top-color: var(--terracotta); }
+
+  .card-head {
+    display: none;
+  }
+  .card-head--orig {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 4px;
+  }
+  .num {
+    display: none;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10.5px;
+    font-weight: 600;
+    color: var(--fg-faint);
+    letter-spacing: 2px;
+  }
+  .num .of { color: rgba(128,136,160,0.5); }
+  .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--gold);
+    box-shadow: 0 0 8px rgba(232,181,71,0.55);
+  }
+  .card.c-green .dot { background: var(--green); box-shadow: 0 0 8px rgba(139,192,122,0.55); }
+  .card.c-sage  .dot { background: var(--sage);  box-shadow: 0 0 8px rgba(127,183,217,0.55); }
+  .card.c-terra .dot { background: var(--terracotta); box-shadow: 0 0 8px rgba(201,112,100,0.55); }
+
+  .card-title {
+    font-family: 'Newsreader', serif;
+    font-weight: 400;
+    font-style: italic;
+    font-size: 42px;
+    line-height: 1.0;
+    color: var(--fg);
+    letter-spacing: -0.6px;
+    margin: 2px 0 8px;
+  }
+  .card.c-gold  .card-title em { color: var(--gold); font-style: italic; }
+  .card.c-green .card-title em { color: var(--green); font-style: italic; }
+  .card.c-sage  .card-title em { color: var(--sage); font-style: italic; }
+  .card.c-terra .card-title em { color: var(--terracotta); font-style: italic; }
+
+  .card-tagline {
+    font-family: 'Newsreader', serif;
+    font-style: italic;
+    font-weight: 400;
+    font-size: 20px;
+    line-height: 1.25;
+    color: var(--fg-soft);
+    margin: 0 0 10px;
+    letter-spacing: 0.1px;
+  }
+  .card-tagline::before { content: "\201C"; color: var(--fg-faint); margin-right: 1px; }
+  .card-tagline::after  { content: "\201D"; color: var(--fg-faint); margin-left: 1px; }
+
+  .card-desc {
+    font-size: 16px;
+    line-height: 1.42;
+    color: var(--fg-soft);
+    margin: 0 0 10px;
+  }
+  .card-desc b { color: var(--fg); font-weight: 600; }
+
+  .questions {
+    list-style: none;
+    margin: 0 0 12px;
+    padding: 10px 0 0;
+    border-top: 1px dashed var(--line);
+    display: flex; flex-direction: column;
+    gap: 6px;
+  }
+  .questions li {
+    font-size: 15px;
+    line-height: 1.36;
+    color: var(--fg-soft);
+    padding-left: 16px;
+    position: relative;
+  }
+  .questions li::before {
+    content: "?";
+    position: absolute;
+    left: 0; top: 0;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--gold);
+  }
+  .card.c-green .questions li::before { color: var(--green); }
+  .card.c-sage  .questions li::before { color: var(--sage); }
+  .card.c-terra .questions li::before { color: var(--terracotta); }
+
+  .prompt {
+    margin-top: auto;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--gold);
+    border-radius: 6px;
+    padding: 9px 12px 10px;
+  }
+  .card.c-green .prompt { border-left-color: var(--green); }
+  .card.c-sage  .prompt { border-left-color: var(--sage); }
+  .card.c-terra .prompt { border-left-color: var(--terracotta); }
+  .prompt .p-label {
+    display: block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 1.8px;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 5px;
+  }
+  .card.c-green .prompt .p-label { color: var(--green); }
+  .card.c-sage  .prompt .p-label { color: var(--sage); }
+  .card.c-terra .prompt .p-label { color: var(--terracotta); }
+  .prompt .p-text {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--fg-soft);
+    margin: 0;
+  }
+  .prompt .p-text .at { color: var(--fg); font-weight: 600; }
+
+  /* ============ CLOSING ============ */
+  .closing {
+    position: absolute;
+    bottom: 26px; left: 80px; right: 80px;
+    text-align: center;
+    font-family: 'Newsreader', serif;
+    font-style: italic;
+    font-size: 20px;
+    color: var(--fg-faint);
+    z-index: 2;
+  }
+  .closing em { color: var(--gold); font-style: italic; }
+
+  /* staggered entry */
+  @keyframes el-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .card {
+    opacity: 0;
+    animation: el-in 0.55s ease-out forwards;
+  }
+  .card:nth-child(1)  { animation-delay: 0.04s; }
+  .card:nth-child(2)  { animation-delay: 0.08s; }
+  .card:nth-child(3)  { animation-delay: 0.12s; }
+  .card:nth-child(4)  { animation-delay: 0.16s; }
+  .card:nth-child(5)  { animation-delay: 0.22s; }
+  .card:nth-child(6)  { animation-delay: 0.26s; }
+  .card:nth-child(7)  { animation-delay: 0.30s; }
+  .card:nth-child(8)  { animation-delay: 0.34s; }
+  .card:nth-child(9)  { animation-delay: 0.40s; }
+  .card:nth-child(10) { animation-delay: 0.44s; }
+  .card:nth-child(11) { animation-delay: 0.48s; }
+  .card:nth-child(12) { animation-delay: 0.52s; }
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="frame">
+
+    <!-- ============ HEADER ============ -->
+    <div class="header">
+      <div>
+        <h1 class="title">From the living room to the <em>dog park.</em></h1>
+        <p class="subtitle">You wouldn't take a pup to the park without a <b>leash.</b> Don't share your app without these.</p>
+      </div>
+
+    </div>
+
+    <!-- ============ GRID ============ -->
+    <div class="grid">
+
+      <!-- 01 -->
+      <!-- Row 1, Col 1 -->
+      <div class="card c-gold">
+        <div class="card-head">
+          <span class="dot"></span>
+          <div class="num">01<span class="of"> / 9</span></div>
+        </div>
+        <h2 class="card-title">Security &amp; <em>data</em></h2>
+        <p class="card-tagline">Has the pup had its shots?</p>
+        <p class="card-desc">Who can use it, what information it touches, and where that goes. <b>Internal tools can still hurt the company.</b></p>
+        <ul class="questions">
+          <li>Who can log in — and would you spot it if the wrong person did?</li>
+          <li>Could you delete a user's data if they asked?</li>
+        </ul>
+        <div class="prompt">
+          <span class="p-label">Try this prompt →</span>
+          <p class="p-text">List every way someone can reach my app, and which require sign-in. Trace what user info we save, and flag anywhere we keep passwords, keys, or personal info. Plan a sign-in lockdown and a "delete my data" button.</p>
+        </div>
+      </div>
+
+      <!-- Row 1, Col 2 -->
+      <div class="card c-green">
+        <div class="card-head">
+          <span class="dot"></span>
+          <div class="num">02<span class="of"> / 9</span></div>
+        </div>
+        <h2 class="card-title"><em>Cost</em></h2>
+        <p class="card-tagline">Who's paying for the kibble?</p>
+        <p class="card-desc">Mostly AI usage, plus servers and storage. <b>"Cheap when it's just me"</b> is how surprise bills happen.</p>
+        <ul class="questions">
+          <li>What does one person cost per day — times 100?</li>
+          <li>Will an alarm warn you before the bill gets scary?</li>
+        </ul>
+        <div class="prompt">
+          <span class="p-label">Try this prompt →</span>
+          <p class="p-text">Estimate per-use cost. Project the monthly bill at 100 people × 20 uses a day. Name the 3 biggest spenders. Plan a daily limit per person, a total spend alarm, and a safety switch for runaway usage.</p>
+        </div>
+      </div>
+
+      <!-- Row 1, Col 3 -->
+      <div class="card c-sage">
+        <div class="card-head">
+          <span class="dot"></span>
+          <div class="num">03<span class="of"> / 9</span></div>
+        </div>
+        <h2 class="card-title"><em>Compliance</em></h2>
+        <p class="card-tagline">Is the pup licensed for the park?</p>
+        <p class="card-desc">The boring rules: who signs off, what software you can use, where data can live. <b>Boring until it isn't.</b></p>
+        <ul class="questions">
+          <li>Does this need a security sign-off before more people use it?</li>
+          <li>Are there countries or kinds of data that change the rules?</li>
+        </ul>
+        <div class="prompt">
+          <span class="p-label">Try this prompt →</span>
+          <p class="p-text">List every outside library my app uses. Flag any with licenses Oracle doesn't allow. Identify what kinds of data it handles, then draft the security-review questions I should expect — with my best-guess answers.</p>
+        </div>
+      </div>
+
+      <!-- Row 2, Col 1 -->
+      <div class="card c-terra">
+        <div class="card-head">
+          <span class="dot"></span>
+          <div class="num">04<span class="of"> / 9</span></div>
+        </div>
+        <h2 class="card-title">Critical <em>dependencies</em></h2>
+        <p class="card-tagline">Does the pup need its blanket?</p>
+        <p class="card-desc">What does your app need to do its job? <b>If it depends on what it's meant to help</b> — you've got a chicken-and-egg problem.</p>
+        <ul class="questions">
+          <li>If something your app relies on goes down, does the app still open?</li>
+          <li>Worst case — blanket <em>and</em> pup missing — what breaks?</li>
+        </ul>
+        <div class="prompt">
+          <span class="p-label">Try this prompt →</span>
+          <p class="p-text">List every outside service my app uses. For each, tell me what happens if it disappears, whether there's a backup, and any chicken-and-egg risks. Plan how to keep the app useful when they break.</p>
+        </div>
+      </div>
+
+      <!-- Row 2, Col 2 -->
+      <!-- Row 2, Col 3 -->
+      <div class="card c-green">
+        <div class="card-head">
+          <span class="dot"></span>
+          <div class="num">06<span class="of"> / 9</span></div>
+        </div>
+        <h2 class="card-title"><em>Monitoring</em></h2>
+        <p class="card-tagline">Can you tell when the pup's sick?</p>
+        <p class="card-desc">The difference between <b>"broken for an hour"</b> and <b>"broken for a week"</b> — until a user complains.</p>
+        <ul class="questions">
+          <li>Would you know within minutes, or only when a user complains?</li>
+          <li>Does anyone actually get notified — or does it just sit there?</li>
+        </ul>
+        <div class="prompt">
+          <span class="p-label">Try this prompt →</span>
+          <p class="p-text">Tell me how I'd find out my app broke today. List what it writes down, measures, and alerts on. Plan structured logs, an "is it alive?" check, a 3-signal dashboard, and an alert that pings someone's phone.</p>
+        </div>
+      </div>
+
+      <!-- Row 3, Col 1 -->
+      <div class="card c-sage">
+        <div class="card-head">
+          <span class="dot"></span>
+          <div class="num">07<span class="of"> / 9</span></div>
+        </div>
+        <h2 class="card-title"><em>Scalability</em></h2>
+        <p class="card-tagline">What happens at the dog park?</p>
+        <p class="card-desc">Behaving with one walker is easy. <b>Behaving with fifty other dogs around</b> is the actual test.</p>
+        <ul class="questions">
+          <li>Have you tested it with more than one person at the same time?</li>
+          <li>Will it feel fast with 10× the people? 100×?</li>
+        </ul>
+        <div class="prompt">
+          <span class="p-label">Try this prompt →</span>
+          <p class="p-text">Walk through what happens at 1, 10, and 100 people using my app at once. Find the slowest part — database, memory, anything waiting in line — and plan the fix, plus the smallest changes that unlock 10× more people.</p>
+        </div>
+      </div>
+
+      <!-- Row 3, Col 2 -->
+      <div class="card c-terra">
+        <div class="card-head">
+          <span class="dot"></span>
+          <div class="num">08<span class="of"> / 9</span></div>
+        </div>
+        <h2 class="card-title">Hosting</h2>
+        <p class="card-tagline">One pup, or the whole kennel?</p>
+        <p class="card-desc">Does each person run their own copy, <b>or do they share one</b> running somewhere central?</p>
+        <ul class="questions">
+          <li>If shared, who pushes updates — and how often?</li>
+          <li>Which setup actually fits what this tool is for?</li>
+        </ul>
+        <div class="prompt">
+          <span class="p-label">Try this prompt →</span>
+          <p class="p-text">Tell me if this is better as a private copy per person, one shared version everyone visits, or a mix — and why. Plan how updates reach people, how I rotate passwords and keys safely, and how I undo a bad release.</p>
+        </div>
+      </div>
+
+      <!-- Row 3, Col 3 -->
+      <div class="card c-gold">
+        <div class="card-head">
+          <span class="dot"></span>
+          <div class="num">09<span class="of"> / 9</span></div>
+        </div>
+        <h2 class="card-title"><em>Maintenance</em></h2>
+        <p class="card-tagline">Who walks the pup on holiday?</p>
+        <p class="card-desc">When you're on PTO, who keeps it alive? <b>When you leave the team, who inherits it?</b></p>
+        <ul class="questions">
+          <li>Are there written instructions to restart, fix, or change passwords?</li>
+          <li>If you got hit by a bus tomorrow, would this die with you?</li>
+        </ul>
+        <div class="prompt">
+          <span class="p-label">Try this prompt →</span>
+          <p class="p-text">Pretend I'm leaving Oracle next month. Write the instructions my replacement needs: how to restart, release a fix, change passwords and keys, find on-call, and access every part of the system. Flag anything only in my head.</p>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- closing removed -->
+
+  </div>
+</div>
+
+<script>
+  (function () {
+    const frame = document.querySelector('.frame');
+    function fit() {
+      const sx = window.innerWidth / 1920;
+      const sy = window.innerHeight / 1080;
+      const s = Math.min(sx, sy);
+      frame.style.transform = 'translate(-50%, -50%) scale(' + s + ')';
+    }
+    window.addEventListener('resize', fit);
+    window.addEventListener('load', fit);
+    fit();
+  })();
+</script>
+</body>
+</html>

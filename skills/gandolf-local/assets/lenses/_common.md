@@ -71,8 +71,9 @@ These are what gandolf checks first, so check them first.
 - **Tenant-safe state.** `dfl-http` serves many tenants in one process and
   `agent_id` is the tenancy boundary. A new `static` / `OnceLock` / `OnceCell` /
   `lazy_static` / thread-local holding per-tenant schema, credentials, caches or
-  connection overlays is a security defect (this was CVE C3). Pass `agent_id`
-  explicitly; thread-locals do not survive thread, rayon, or tokio hops.
+  connection overlays is a security defect, and has been a real one here before.
+  Pass `agent_id` explicitly; thread-locals do not survive thread, rayon, or
+  tokio hops.
 - **No embedded tokio runtime in library code.** `reqwest::blocking::Client` or
   `tokio::runtime::Runtime::new()` in code reachable from a `dfl-http` async
   handler panics on drop and silently loses data. The correct bridges are

@@ -12,7 +12,7 @@
 # rather than sub-agents inside one session. That is deliberate: the CI skill
 # carries a warning that firing sub-agents and then ending the turn kills the
 # session with every reviewer still running and nothing posted, which is what
-# happened on pull request #11303. Independent processes cannot fail that way,
+# happened once in this repository's own CI. Independent processes cannot fail that way,
 # and they are genuinely concurrent.
 #
 #   review.sh                    Full gate: pre-gate, five reviewers, report.
@@ -370,7 +370,7 @@ done
 # A reviewer that produced nothing is a gate failure, not a pass. This is the
 # whole point of CI's reconcile-review.sh: a run that finishes "successfully"
 # having posted nothing is indistinguishable from being ignored, and on pull
-# request #11139 that produced a green check over a review nobody had done.
+# occasion that produced a green check over a review nobody had done.
 if [ -n "$FAILED_LENSES" ]; then
     echo ""
     echo "gandolf-local: FAILED — no report from:$FAILED_LENSES"

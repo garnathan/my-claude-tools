@@ -162,7 +162,7 @@ say ""
 # blocked. Three specifics that a hand-rolled pattern gets wrong:
 #
 #   - A bare "[bot]" is NOT an AI identity. This repository deliberately authors
-#     automation commits as oracle-analytics-gandolf[bot], and sixteen workflows
+#     automation commits as its own org bot account, and many workflows
 #     pin that identity on purpose, so matching "[bot]" fails a legitimate commit.
 #   - A bare "claude" is not either. It appears in a commit that FIXES or
 #     DOCUMENTS Rule 0 while naming what it removed — the CI script calls this
@@ -384,8 +384,8 @@ EOF
                     # A crate's unit tests all share ONE process, and a test that
                     # writes a process-wide environment variable leaks into every
                     # other test in that binary. Two such races exist in this
-                    # workspace today: one test sets DFL_WORKER_TRANSPORT and one
-                    # sets a lakeproxy variable, and both make an unrelated test
+                    # workspace today: two tests each set a process-wide variable,
+                    # and both make an unrelated test
                     # fail depending on execution order. Blocking a push for that
                     # is a false positive — the change under review did not cause
                     # it, and CI's own suite is ordered differently.

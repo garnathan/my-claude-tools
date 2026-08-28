@@ -79,7 +79,7 @@ stop it reporting something untrue:
   signature of an ordering race, so it reports the race by name instead of
   blocking the push. Nothing is hidden and this is not "retry until green" — if a
   test fails alone as well, the failure stands. Two such races exist in the
-  workspace today, around `DFL_WORKER_TRANSPORT` and a lakeproxy variable;
+  workspace today, each around a process-wide variable a test sets;
   `dfl/CLAUDE.md` Rule 21 asks for them to be fixed rather than re-run.
 
 Knobs, all environment variables: `GANDOLF_LOCAL=0` skips the hook for one push,
@@ -125,7 +125,7 @@ Fire all five with the Agent tool in a **single message**, `subagent_type:
   read `.claude/skills/full-review/SKILL.md` for the lens paragraph gandolf uses.
 
 **Never end your turn while a reviewer is still running.** The CI skill carries
-this warning because it happened: on pull request #11303 the orchestrator ended
+this warning because it happened in CI: the orchestrator ended
 after 24 turns with all four reviewers pending, the session died, and the run
 posted nothing while reporting success. If the harness returns reviewers by
 notification, keep working — corroborate findings against the code yourself —

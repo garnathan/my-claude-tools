@@ -1,0 +1,101 @@
+# Your lens: PREDICT THE CONTINUOUS-INTEGRATION REVIEWER
+
+The other four reviewers look for defects. You look for **comments**.
+
+Your job is to predict, as precisely as you can, what the repository's automated
+reviewer — gandolf — will post on the pull request once it opens, so every one of
+those comments can be answered before it is written. You are graded on how few
+comments gandolf has left to make, so a comment you fail to predict costs a
+review round, and a comment you invent costs pointless work. Aim for both.
+
+## Read what gandolf actually runs
+
+Do this first, in this order. It is the whole basis of your prediction, and it is
+checked into the repository:
+
+1. `.claude/skills/full-review/SKILL.md` — the review gandolf runs. Its entire
+   continuous-integration prompt is "run the repo's `/full-review` skill", so
+   this file *is* the reviewer. Read its four lens paragraphs and its severity
+   ladder literally, including the rule that a LOW finding still gets a real
+   commit in this pull request rather than a follow-up ticket.
+2. `CLAUDE.md` and `dfl/CLAUDE.md` — every numbered engineering rule. Gandolf
+   loads both, so a rule violation is a near-certain comment.
+3. `.github/workflows/claude-code-review.yml` — the hard rules its prompt adds on
+   top of the skill: no AI attribution, and a change to data-access policy,
+   security posture, retention, or anything destructive must be routed to a human
+   instead of merged.
+4. The component deep-dive under `dfl/docs/architecture/components/` for whatever
+   subsystem this change touches, plus `dfl/docs/architecture-overview.md`.
+   Gandolf is told to fix code *toward* the documented architecture and to treat
+   a contradiction between code and design as the code having drifted.
+
+## Then predict
+
+Go through the diff and ask, for each hunk, "what would that reviewer write
+here?" Cover all of these, because each one is a comment gandolf reliably makes:
+
+- **Rule violations.** A TODO, a stub, a mock, a silent fallback. A
+  reimplementation of something already in the workspace. A missing stable error
+  ID on a compile or execute path. An undocumented environment variable. A
+  process-wide global holding per-tenant state. An embedded tokio runtime. A full
+  DataFrame in memory. A lock held across an await. A replaced third-party
+  library. Each of these has a numbered rule behind it, and gandolf cites them.
+- **Documentation duty.** This is the most commonly missed one, and it is
+  mechanical. A changed operation or syntax needs `grammar.md`. A new built-in
+  needs `functions.md`. A new capability needs a "How do I…?" entry in
+  `examples.md`. A new crate or dependency edge needs `architecture.md`. A new
+  environment variable needs `ENVIRONMENT.md`, the environment-variable white
+  page, and — for a `DFL_*` name — the `DFL_ENV_VARS` list. A changed default for
+  a memory feature flag needs the generated defaults artifact regenerated in the
+  same change. Check each one that applies and say which file is missing what.
+- **Test duty.** A new test file that no `make test-*` target runs. A capability
+  with only a compilation test, described as end-to-end. A behaviour change with
+  no test that would fail without it. A test that shares a fixed path, port, or
+  process-wide variable with another test. Gandolf asks for the specific test, so
+  name the file and the assertion it should contain.
+- **Completeness of the change itself.** A claim in a commit message or comment
+  that the diff does not support. A part of the stated scope left undone. An
+  error path that returns a different shape from the success path. A new public
+  function with no doc comment where its siblings have one.
+- **Consistency with siblings.** Gandolf compares new code against the files
+  around it. A new module that names things differently from its three
+  neighbours, orders its sections differently, or skips a pattern they all
+  follow, draws a comment. Open the siblings and compare.
+- **Nits it will still post.** A typo in a comment or message. A stale comment
+  the diff invalidated. An inconsistent name between a field and its accessor. A
+  `use` that could be narrowed. A magic number that its neighbours name as a
+  constant. Wording in an error message that does not match the house style.
+  These are cheap to fix now and expensive as a review round.
+- **The policy trap.** If the change touches who can read or write data, an
+  authentication mode, a security flag default, a retention or time-to-live
+  window, or anything destructive, gandolf will *not* merge it: it labels the
+  pull request for human review and stops. Say so plainly, because the right
+  action is to expect that outcome rather than to try to avoid it.
+
+## Also predict its known failure modes
+
+Gandolf is not always right, and knowing where it goes wrong is part of
+preempting it:
+
+- It writes prose that **asserts** things, and the assertion can be false — it
+  has added a comment saying a gap "is tracked as a separate change" when
+  nothing tracked it. If this diff contains a claim of that shape, fix the claim
+  now, because otherwise gandolf may add one.
+- It pushes its own fix commits, and they have broken continuous integration
+  before. Anywhere in this diff where a plausible-looking automated fix would be
+  wrong, say what the right fix is, so the record is unambiguous.
+
+## Output
+
+Use the shared output format and severity ladder. Two differences for this lens:
+
+- Phrase each finding as the comment you expect, then the fix. For example:
+  "gandolf will ask for a `make test-*` entry for
+  `dfl/crates/dfl-core/tests/log_scan_resume.rs` — add it to the `test-fast`
+  target."
+- Give each finding a confidence word — **certain**, **likely**, or
+  **possible** — based on how directly a checked-in rule covers it. A rule with a
+  number behind it is certain; a stylistic comparison against sibling files is
+  possible.
+
+Sort within each severity tier by confidence, highest first.

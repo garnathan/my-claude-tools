@@ -67,7 +67,10 @@ CHANGED="$(git diff --name-only "$MERGE_BASE" HEAD 2>/dev/null)"
 # Parallel newline-delimited lists rather than an associative array: bash 3.2 has
 # no `declare -A`.
 PASSED=""; FAILED=""; SKIPPED=""
-LOGDIR="$(git rev-parse --git-common-dir)/gandolf-local/pregate"
+# Absolute — see the note in review.sh: `--git-common-dir` is relative in a main
+# clone, and a relative log path in a printed failure message is useless to anyone
+# reading it from elsewhere.
+LOGDIR="$(cd "$(git rev-parse --git-common-dir)" && pwd)/gandolf-local/pregate"
 mkdir -p "$LOGDIR"
 
 record() {  # record <status> <name>

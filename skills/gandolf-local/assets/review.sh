@@ -71,7 +71,13 @@ command -v jq >/dev/null 2>&1     || { echo "gandolf-local: 'jq' is not on PATH"
 
 TOP="$(git rev-parse --show-toplevel 2>/dev/null)" || { echo "not inside a git work tree" >&2; exit 2; }
 cd "$TOP" || exit 2
-STATE="$(git rev-parse --git-common-dir)/gandolf-local"
+# Absolute, deliberately. `--git-common-dir` answers with a bare relative `.git`
+# in a main clone and an absolute path only from a linked worktree, so taking it
+# as-is writes receipts holding relative report paths that resolve only from the
+# repository root — and the feedback loop, which reads those paths back, does not
+# run from there. The common directory is shared across a clone and its worktrees,
+# so one review counts from any of them.
+STATE="$(cd "$(git rev-parse --git-common-dir)" && pwd)/gandolf-local"
 mkdir -p "$STATE/receipts" "$STATE/reports" "$STATE/runs"
 
 # ── what is being reviewed ───────────────────────────────────────────────────

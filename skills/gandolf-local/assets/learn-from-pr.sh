@@ -53,7 +53,10 @@ if [ -z "$REPO" ]; then
         || { echo "cannot determine the repository — pass --repo owner/repo" >&2; exit 2; }
 fi
 
-STATE="$(git rev-parse --git-common-dir 2>/dev/null)/gandolf-local"
+GITCOMMON="$(git rev-parse --git-common-dir 2>/dev/null)" \
+    || { echo "not inside a git work tree" >&2; exit 2; }
+# Absolute, so the receipt's stored report path resolves from wherever this runs.
+STATE="$(cd "$GITCOMMON" && pwd)/gandolf-local"
 OUT="$STATE/learn/pr-$PR"
 mkdir -p "$OUT"
 

@@ -31,6 +31,7 @@ Everything lives beside this file, under `assets/`:
 | `lenses/_common.md` | The shared reviewer brief: conventions, severity ladder, required finding shape. |
 | `lenses/{code,security,memory,concurrency}.md` | The four specialist lenses gandolf runs. |
 | `lenses/gandolf.md` | The fifth lens: predict the comments the CI reviewer will post. |
+| `learn-from-pr.sh` | The feedback loop. Pulls what gandolf actually posted on a pull request, scores the local gate against it, and proposes the lens edit for each miss. |
 | `install-hook.sh` | Composes the gate into `.git/hooks/pre-push`, preserving the Git LFS hook already there. |
 
 ## Running it
@@ -178,6 +179,33 @@ Three details matter:
   timeout. So it blocks with the command to run, which is the enforcement the
   gate exists for. If you are an agent and a push is refused this way, run the
   review — do not set `GANDOLF_LOCAL=0` unless the user tells you to.
+
+## Closing the loop after a real review
+
+A local review that is merely good does not drive the comment count down on its
+own. What drives it down is knowing which comments the local gate failed to
+predict. So whenever gandolf does post a review, feed it back:
+
+```bash
+bash ~/.claude/skills/gandolf-local/assets/learn-from-pr.sh <pr-number>
+```
+
+It collects every marker-free comment gandolf posted — across the conversation,
+its formal reviews, and its inline diff comments — finds the local report for the
+same commit through the receipts, and reports three things: what was predicted,
+what was missed, and the exact lens edit for each miss. A miss a grep could catch
+belongs in `gandolf-bait.sh` rather than in a lens, and it says which is which.
+
+Read the amendments before applying them; they edit the prompts the gate runs on,
+so nothing is applied automatically. Then commit the lens change in
+`my-claude-tools`, so the next branch starts from the improved version.
+
+One thing already learned this way: gandolf's review format on a real pull
+request has a `### Nits (optional)` section. Nits genuinely come back as
+comments, which is why the shared brief tells reviewers to report them rather
+than filter them — the opposite of the calibration in
+[.github/review-prompt-impl.md](.github/review-prompt-impl.md), which belongs to
+a different workflow and is not what the pull-request reviewer runs.
 
 ## What this gate does not cover
 

@@ -250,11 +250,17 @@ pids=""; names=""
 for lens in $LENSES; do
     build_prompt "$lens" >"$RUN/prompt-$lens.md"
     printf '  starting reviewer: %-14s' "$lens"
+    # The prompt goes in on standard input, NOT as a positional argument.
+    # `--allowedTools` is variadic, so a trailing argument after it is read as one
+    # more tool pattern: the whole prompt was consumed as tool names, and every
+    # reviewer died instantly on "Input must be provided either through stdin or
+    # as a prompt argument". Standard input also removes any argument-length
+    # ceiling on a long brief.
     MAX_THINKING_TOKENS=32000 claude -p \
         --model "$MODEL" \
         --allowedTools "$REVIEW_TOOLS" \
-        "$(cat "$RUN/prompt-$lens.md")" \
-        >"$RUN/report-$lens.md" 2>"$RUN/stderr-$lens.log" </dev/null &
+        <"$RUN/prompt-$lens.md" \
+        >"$RUN/report-$lens.md" 2>"$RUN/stderr-$lens.log" &
     p=$!
     pids="$pids $p"; names="$names $lens"
     echo "pid $p"
@@ -303,7 +309,11 @@ if [ -n "$FAILED_LENSES" ]; then
     echo ""
     echo "gandolf-local: FAILED — no report from:$FAILED_LENSES"
     echo "  The gate refuses to record a verdict on a partial review."
-    echo "  Re-run, or run a single lens to see the error:  review.sh --lens${FAILED_LENSES%% *}"
+    # Trim the leading space the accumulator leaves, or the hint prints a bare
+    # `--lens` with no name and cannot be pasted.
+    first_failed="$(printf '%s' "$FAILED_LENSES" | tr ' ' '\n' | grep . | head -1)"
+    echo "  Re-run, or run one lens to see its error:  review.sh --lens $first_failed"
+    echo "  Reviewer stderr: $RUN/stderr-<lens>.log"
     exit 1
 fi
 
@@ -413,8 +423,8 @@ EOF
 MAX_THINKING_TOKENS=32000 claude -p \
     --model "$MODEL" \
     --allowedTools "Read,Grep,Glob,Bash(git diff:*),Bash(git show:*),Bash(cat:*),Bash(sed:*),Bash(rg:*)" \
-    "$(cat "$CONSOL_PROMPT")" \
-    >"$RUN/consolidated.md" 2>"$RUN/stderr-consolidate.log" </dev/null
+    <"$CONSOL_PROMPT" \
+    >"$RUN/consolidated.md" 2>"$RUN/stderr-consolidate.log"
 CONSOL_RC=$?
 
 if [ "$CONSOL_RC" -ne 0 ] || [ ! -s "$RUN/consolidated.md" ]; then
@@ -455,7 +465,7 @@ N_SHOULD="$(( ${N_MED:-0} + ${N_LOW:-0} + ${N_NIT:-0} ))"
     echo '---'
     echo
     echo "Reviewed \`$(git rev-parse --short "$MERGE_BASE")..$(git rev-parse --short "$HEAD_SHA")\` on $(date '+%Y-%m-%d %H:%M:%S %Z')."
-    echo "Four lenses, model \`$MODEL\`. Review key \`$KEY_SHORT\`. Working files in \`$RUN\`."
+    echo "Lenses: $(printf '%s' "$LENSES" | tr ' ' ',' ). Model \`$MODEL\`. Review key \`$KEY_SHORT\`. Working files in \`$RUN\`."
 } >"$REPORT"
 cp "$REPORT" "$STATE/latest.md"
 

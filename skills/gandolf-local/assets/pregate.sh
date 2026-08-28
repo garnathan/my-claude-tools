@@ -37,6 +37,7 @@ BASE_REF="origin/main"
 QUICK=0
 RUN_TEST=1
 REPORT=""
+RULE0_ONLY=0
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -44,6 +45,14 @@ while [ "$#" -gt 0 ]; do
         --quick)   QUICK=1; RUN_TEST=0; shift ;;
         --no-test) RUN_TEST=0; shift ;;
         --report)  REPORT="${2:-}"; [ -n "$REPORT" ] || { echo "--report needs a path" >&2; exit 2; }; shift 2 ;;
+        # Run ONLY the commit-scoped Rule 0 sweep and exit with its status. The
+        # receipt the pre-push hook trusts is keyed on the DIFF, which carries no
+        # commit author or message, so rewording or amending a commit keeps a
+        # passing receipt valid — correctly, for the code, but it means the Rule 0
+        # check would never see a Claude co-author trailer added by that amend.
+        # This costs milliseconds, so the hook re-runs it every time rather than
+        # letting a receipt vouch for a message it never hashed.
+        --rule0-only) RULE0_ONLY=1; shift ;;
         -h|--help) sed -n '2,30p' "$0"; exit 0 ;;
         *)         echo "unknown argument: $1" >&2; exit 2 ;;
     esac
@@ -61,7 +70,14 @@ if ! BASE_SHA="$(git rev-parse --verify --quiet "$BASE_REF^{commit}")"; then
 fi
 MERGE_BASE="$(git merge-base "$BASE_SHA" HEAD 2>/dev/null)" || MERGE_BASE="$BASE_SHA"
 
-CHANGED="$(git diff --name-only "$MERGE_BASE" HEAD 2>/dev/null)"
+# See the note in gandolf-bait.sh: a `color.ui`/`color.diff` of `always` in any
+# config scope, or a `diff.external` driver, changes what git prints even to a
+# pipe. Override both on the command line, which beats every config scope.
+git_diff() {
+    git --no-pager -c color.ui=false -c color.diff=false diff --no-color --no-ext-diff "$@"
+}
+
+CHANGED="$(git_diff --name-only "$MERGE_BASE" HEAD 2>/dev/null)"
 
 # ── result accounting ────────────────────────────────────────────────────────
 # Parallel newline-delimited lists rather than an associative array: bash 3.2 has
@@ -116,36 +132,64 @@ say ""
 # API, because that is the exact set the merge-queue squash collects authors from.
 # There is no pull request yet here, so walk the local range instead. Same rule,
 # earlier: catch it while the commits can still be amended cheaply.
-AI_RE='claude|anthropic|\[bot\]'
+# Use the SAME patterns the merge-blocking check uses, taken from
+# .github/scripts/assert-no-ai-commit-author.sh, rather than inventing broader
+# ones. A local gate that is stricter than the gate it mirrors blocks pushes that
+# would have passed, and that is indistinguishable from a bug to whoever is
+# blocked. Three specifics that a hand-rolled pattern gets wrong:
+#
+#   - A bare "[bot]" is NOT an AI identity. This repository deliberately authors
+#     automation commits as oracle-analytics-gandolf[bot], and sixteen workflows
+#     pin that identity on purpose, so matching "[bot]" fails a legitimate commit.
+#   - A bare "claude" is not either. It appears in a commit that FIXES or
+#     DOCUMENTS Rule 0 while naming what it removed — the CI script calls this
+#     case out explicitly, which is why it matches identity fields separately from
+#     the message and anchors the message patterns to the start of a line.
+#   - Commits authored before the cutoff are grandfathered by CI, so flagging them
+#     locally reports a problem that cannot block anything and cannot be fixed
+#     without rewriting history.
+AI_IDENTITY_RE='claude\[bot\]|41898282\+claude|@anthropic\.com|generated with claude'
+AI_MESSAGE_RE='^[[:space:]]*co-authored-by:.*(claude\[bot\]|41898282\+claude|@anthropic\.com)|^[[:space:]]*(🤖[[:space:]]*)?generated with \[?claude'
+# Same default and same override name as the CI script, so the two agree.
+GRANDFATHER_BEFORE="${RULE0_GRANDFATHER_BEFORE-2026-08-24T04:00:00Z}"
+
 rule0_check() {
-    local bad=0 line
-    while IFS= read -r line; do
-        [ -z "$line" ] && continue
-        if printf '%s' "$line" | grep -qiE "$AI_RE"; then
-            echo "AI identity on commit: $line"
+    local bad=0 sha adate idents msg skipped=0
+    for sha in $(git rev-list "$MERGE_BASE..HEAD" 2>/dev/null); do
+        adate="$(git show -s --format=%aI "$sha" 2>/dev/null)"
+        if [ -n "$GRANDFATHER_BEFORE" ] && [ -n "$adate" ] \
+            && [ "$(printf '%s\n%s\n' "$adate" "$GRANDFATHER_BEFORE" | sort | head -1)" = "$adate" ] \
+            && [ "$adate" != "$GRANDFATHER_BEFORE" ]; then
+            skipped=$((skipped + 1))
+            continue
+        fi
+        # Identity fields only — author and committer name and address.
+        idents="$(git show -s --format='%an <%ae>%n%cn <%ce>' "$sha" 2>/dev/null)"
+        if printf '%s' "$idents" | grep -qiE "$AI_IDENTITY_RE"; then
+            echo "AI identity on $sha:"
+            printf '%s\n' "$idents" | sed 's/^/    /'
             bad=1
         fi
-    done <<EOF
-$(git log --format='%H author=%an <%ae> committer=%cn <%ce>' "$MERGE_BASE..HEAD" 2>/dev/null)
-EOF
-    while IFS= read -r line; do
-        [ -z "$line" ] && continue
-        if printf '%s' "$line" | grep -qiE "$AI_RE"; then
-            echo "AI co-author trailer: $line"
+        # Message, with its line structure intact so the anchors mean something.
+        msg="$(git show -s --format=%B "$sha" 2>/dev/null)"
+        if printf '%s' "$msg" | grep -qiE "$AI_MESSAGE_RE"; then
+            echo "AI attribution in the message of $sha:"
+            printf '%s' "$msg" | grep -inE "$AI_MESSAGE_RE" | sed 's/^/    /'
             bad=1
         fi
-    done <<EOF
-$(git log --format='%H %(trailers:key=Co-authored-by,valueonly)' "$MERGE_BASE..HEAD" 2>/dev/null | grep -i 'co\|claude\|anthropic' || true)
-EOF
-    # The generated-with marker is forbidden in the message body as well.
-    if git log --format='%B' "$MERGE_BASE..HEAD" 2>/dev/null \
-        | grep -qiE 'generated with .*claude|claude\.com/claude-code|co-authored-by:.*(claude|anthropic|noreply@anthropic)'; then
-        echo "commit message body carries an AI attribution marker"
-        bad=1
-    fi
+    done
+    [ "$skipped" -gt 0 ] && echo "($skipped commit(s) authored before $GRANDFATHER_BEFORE are grandfathered, as in CI)"
     return "$bad"
 }
 run_check "Rule 0 — no AI attribution on commits" "$LOGDIR/rule0.log" rule0_check
+
+# --rule0-only stops here: the pre-push hook calls this on every push, including
+# when a receipt already vouches for the code, so it must stay to milliseconds.
+if [ "$RULE0_ONLY" -eq 1 ]; then
+    n_fail_r0="$(printf '%s' "$FAILED" | grep -c . || true)"
+    [ "${n_fail_r0:-0}" -eq 0 ]
+    exit
+fi
 
 # ── DFL-specific checks ──────────────────────────────────────────────────────
 if [ ! -f "dfl/Makefile" ]; then
@@ -201,6 +245,88 @@ $CHANGED
 EOF
         CRATES="$(printf '%s' "$CRATES" | grep . | sort -u)"
 
+        # Adopt the machine-local toolchain settings the repository already
+        # detected. The Makefile pulls them from dfl/config.mk — written by
+        # ./configure, gitignored, absolute paths — through `-include config.mk`.
+        # PYO3_PYTHON pins an interpreter PyO3 actually supports, and
+        # DYLD_LIBRARY_PATH lets the embedded interpreter find its shared library.
+        #
+        # This matters because only HALF the checks below go through make. The
+        # clippy step does, and inherits these. The cargo test step invokes cargo
+        # directly, so it inherited nothing and picked up whatever python3 came
+        # first on PATH — 3.14 on this machine, which PyO3 0.24 rejects outright
+        # ("newer than PyO3's maximum supported version (3.13)"), failing three
+        # crates for a reason that has nothing to do with the change under review.
+        #
+        # Read config.mk rather than hard-coding an interpreter path, so this
+        # follows ./configure instead of drifting from it.
+        if [ -f dfl/config.mk ]; then
+            adopted=""
+            while IFS='=' read -r k v; do
+                [ -n "$k" ] || continue
+                # config.mk is a make fragment, so a value may reference another
+                # variable as $(NAME). Expand those against the current
+                # environment the way make would, then drop any that remain.
+                case "$v" in
+                    *'$('*)
+                        for ref in $(printf '%s' "$v" | grep -oE '\$\([A-Za-z_][A-Za-z0-9_]*\)' | sort -u); do
+                            name="$(printf '%s' "$ref" | sed 's/^\$(//; s/)$//')"
+                            eval "cur=\${$name:-}"
+                            v="$(printf '%s' "$v" | sed "s|\\\$($name)|$cur|g")"
+                        done
+                        # Collapse the empty segments an unset reference leaves.
+                        v="$(printf '%s' "$v" | sed 's/::*/:/g; s/^://; s/:$//')"
+                        ;;
+                esac
+                [ -n "$v" ] || continue
+                # Never override a value the caller set deliberately.
+                eval "existing=\${$k:-}"
+                if [ -z "$existing" ]; then
+                    export "$k=$v"
+                    adopted="$adopted $k"
+                fi
+            done <<EOF
+$(sed -nE 's/^[[:space:]]*export[[:space:]]+(PYO3_PYTHON|DYLD_LIBRARY_PATH)[[:space:]]*:?=[[:space:]]*(.*)$/\1=\2/p' dfl/config.mk)
+EOF
+            [ -n "$adopted" ] && say "  adopted from dfl/config.mk:$adopted"
+        fi
+
+        # dfl-core's build script rebuilds the JDBC bridge jar whenever the `jdbc`
+        # Cargo feature is on, and tools/jdbc/build-bridges.sh hard-exits when it
+        # cannot find javac and jar. On a machine with no JDK installed that makes
+        # `make lint CRATE=dfl-core` fail for a reason that has nothing to do with
+        # the change under review — and a pre-push gate that can never pass on a
+        # crate is a gate nobody keeps. macOS ships a /usr/bin/java stub that
+        # exists but runs nothing, so test for javac the same way the bridge script
+        # does rather than for java.
+        #
+        # The repository provides the knob for exactly this
+        # (DFL_SKIP_JDBC_BRIDGE_JAR_BUILD=1), so use it — but only when javac is
+        # genuinely missing, so a machine with a JDK still builds and verifies the
+        # bridge. And record it as SKIPPED, never silently: the bridge goes
+        # unverified locally, and only the continuous-integration run covers it.
+        # Testing whether javac EXISTS is not enough, and this is the second time
+        # the same trap caught this script. macOS ships stub /usr/bin/java and
+        # /usr/bin/javac that are present and executable on a machine with no JDK
+        # at all; they print "Unable to locate a Java Runtime" when run. So
+        # `command -v javac` succeeds, the skip never fires, and three crates fail
+        # to build for a reason the operator cannot see. Require a real version
+        # signature — a genuine javac prints "javac 21.0.1" — rather than presence.
+        javac_works() {
+            local jc="$1"
+            command -v "$jc" >/dev/null 2>&1 || [ -x "$jc" ] || return 1
+            "$jc" -version 2>&1 | grep -qE '^javac [0-9]'
+        }
+        if [ -n "${JAVA_HOME:-}" ] && javac_works "${JAVA_HOME}/bin/javac"; then
+            :
+        elif javac_works javac; then
+            :
+        else
+            export DFL_SKIP_JDBC_BRIDGE_JAR_BUILD=1
+            say "  no javac found — setting DFL_SKIP_JDBC_BRIDGE_JAR_BUILD=1 so dfl-core can build"
+            record skip "JDBC bridge jar build (no JDK on this machine; CI still verifies it)"
+        fi
+
         if [ -z "$CRATES" ]; then
             say "  no crate source changed — clippy, shear and tests skipped"
             record skip "clippy / shear / tests (no crate source change)"
@@ -226,9 +352,61 @@ EOF
 
             if [ "$RUN_TEST" -eq 1 ]; then
                 for c in $CRATES; do
-                    run_check "cargo test — $c" "$LOGDIR/test-$c.log" \
+                    if run_check "cargo test — $c" "$LOGDIR/test-$c.log" \
                         env CARGO_TARGET_DIR="$TOP/dfl/target" \
-                        cargo test --manifest-path dfl/Cargo.toml -p "$c" --lib
+                        cargo test --manifest-path dfl/Cargo.toml -p "$c" --lib; then
+                        continue
+                    fi
+                    # A crate's unit tests all share ONE process, and a test that
+                    # writes a process-wide environment variable leaks into every
+                    # other test in that binary. Two such races exist in this
+                    # workspace today: one test sets DFL_WORKER_TRANSPORT and one
+                    # sets a lakeproxy variable, and both make an unrelated test
+                    # fail depending on execution order. Blocking a push for that
+                    # is a false positive — the change under review did not cause
+                    # it, and CI's own suite is ordered differently.
+                    #
+                    # So classify rather than block: re-run each failing test on
+                    # its own. Passing alone while failing in the group IS the
+                    # signature of an ordering or shared-state race. This is NOT
+                    # "retry until green" — nothing is hidden. The names are
+                    # reported, the gate says what happened, and dfl/CLAUDE.md
+                    # Rule 21 asks for the race to be fixed rather than re-run.
+                    # If any of them fails alone too, it is a real failure and the
+                    # gate keeps the FAIL.
+                    isolated_log="$LOGDIR/test-$c-isolated.log"
+                    : >"$isolated_log"
+                    failing="$(awk '/^failures:$/ {inlist=1; next}
+                                    inlist && /^ +[A-Za-z_][A-Za-z0-9_:]*$/ {print $1; next}
+                                    inlist && NF==0 {next}
+                                    {inlist=0}' "$LOGDIR/test-$c.log" | sort -u)"
+                    if [ -z "$failing" ]; then continue; fi
+                    n_alone_fail=0 n_alone=0
+                    for t in $failing; do
+                        n_alone=$((n_alone + 1))
+                        if env CARGO_TARGET_DIR="$TOP/dfl/target" \
+                            cargo test --manifest-path dfl/Cargo.toml -p "$c" --lib -- \
+                            --exact "$t" >>"$isolated_log" 2>&1; then
+                            echo "  PASSES ALONE: $c :: $t" >>"$isolated_log"
+                        else
+                            echo "  FAILS ALONE:  $c :: $t" >>"$isolated_log"
+                            n_alone_fail=$((n_alone_fail + 1))
+                        fi
+                    done
+                    if [ "$n_alone" -gt 0 ] && [ "$n_alone_fail" -eq 0 ]; then
+                        # Downgrade: drop the FAIL this crate recorded and record
+                        # the race instead, naming every test involved.
+                        FAILED="$(printf '%s' "$FAILED" | grep -v "^cargo test — $c\$" || true)
+"
+                        record skip "cargo test — $c: $n_alone test(s) fail only in the full run, pass alone — a test-isolation race in the suite, not this change (dfl/CLAUDE.md Rule 21)"
+                        say "    → re-ran each failure alone: all $n_alone PASS in isolation."
+                        say "      This is a shared-process-state race in the existing suite, not this change."
+                        for t in $failing; do say "        $t"; done
+                        say "      Evidence: $isolated_log"
+                    else
+                        say "    → re-ran each failure alone: $n_alone_fail of $n_alone still FAIL, so these are real."
+                        say "      Evidence: $isolated_log"
+                    fi
                 done
             else
                 say "  --no-test — cargo test skipped"

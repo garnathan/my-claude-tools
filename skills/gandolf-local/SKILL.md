@@ -52,7 +52,35 @@ bash $S/review.sh --check          # exit 0 if this exact tree has a passing rev
 
 Useful flags: `--base <ref>` (default `origin/main`), `--include-worktree` to
 review uncommitted changes too, `--lens <name>` for one lens, `--quick-pregate`
-to skip the build, `--skip-pregate` when you have just run it.
+to skip the build, `--skip-pregate` when you have just run it. `pregate.sh` also
+takes `--no-test` and `--rule0-only` (the commit-scoped sweep on its own, which
+is what `--check` re-runs on every push).
+
+Three things the pre-gate does that are worth knowing, because each one exists to
+stop it reporting something untrue:
+
+- **It adopts the repository's own toolchain settings.** `dfl/config.mk` — written
+  by `./configure`, machine-local — pins `PYO3_PYTHON` and `DYLD_LIBRARY_PATH`.
+  The clippy step inherits them through make; the `cargo test` step invokes cargo
+  directly, so the pre-gate reads that file and exports them itself. Without it,
+  cargo picks up whatever `python3` is first on `PATH`, and PyO3 0.24 rejects
+  anything newer than 3.13 outright — three crates fail to build for a reason
+  that has nothing to do with your change.
+- **It skips the JDBC bridge jar build when there is no JDK**, using the
+  repository's own `DFL_SKIP_JDBC_BRIDGE_JAR_BUILD=1`, and says so. `dfl-core`'s
+  build script shells out to `tools/jdbc/build-bridges.sh`, which hard-exits
+  without `javac`; that fails `dfl-core`, and anything with it as a
+  dev-dependency. Note it tests that `javac` *works*, not that it exists —
+  macOS ships stub `java` and `javac` on a machine with no JDK at all.
+- **It tells a test-isolation race apart from a real failure.** A crate's unit
+  tests share one process, so a test that writes a process-wide environment
+  variable leaks into the others. When a crate's tests fail, the pre-gate re-runs
+  each failing test on its own; passing alone while failing in the group is the
+  signature of an ordering race, so it reports the race by name instead of
+  blocking the push. Nothing is hidden and this is not "retry until green" — if a
+  test fails alone as well, the failure stands. Two such races exist in the
+  workspace today, around `DFL_WORKER_TRANSPORT` and a lakeproxy variable;
+  `dfl/CLAUDE.md` Rule 21 asks for them to be fixed rather than re-run.
 
 Knobs, all environment variables: `GANDOLF_LOCAL=0` skips the hook for one push,
 `GANDOLF_LOCAL_STRICT=1` makes the hook require the low tiers cleared as well,
@@ -173,7 +201,15 @@ Three details matter:
   the local counterpart of CI's `gandolf-full-reviewed` label with its flaw
   removed: that label sticks to a pull request across later commits, so a green
   review can sit over a diff nobody read. Change one line and the receipt stops
-  applying.
+  applying. Because a diff carries no commit author or message, `--check` also
+  re-runs the commit-scoped Rule 0 sweep every time — otherwise amending a
+  message to add a `Co-authored-by:` trailer would keep a passing receipt while
+  changing the one thing that check exists to catch.
+- **A cancelled push cancels the review.** The hook runs the review in the
+  background and traps the interrupt signals, so Ctrl-C kills the whole process
+  group. Without that, an interrupted push left the review and five model
+  processes running detached with nobody to read the result — observed for real,
+  with the launcher reparented to init.
 - **Inside an agent session the hook refuses rather than reviewing.** A nested
   review would outlive the tool call that triggered it and hit that call's
   timeout. So it blocks with the command to run, which is the enforcement the

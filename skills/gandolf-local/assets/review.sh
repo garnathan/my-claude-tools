@@ -89,11 +89,20 @@ fi
 MERGE_BASE="$(git merge-base "$BASE_SHA" HEAD 2>/dev/null)" || MERGE_BASE="$BASE_SHA"
 HEAD_SHA="$(git rev-parse HEAD)"
 
+# See the note in gandolf-bait.sh: a `color.ui`/`color.diff` of `always` in any
+# config scope, or a `diff.external` driver, changes what git prints even to a
+# pipe. Here it would put ANSI escape sequences into the patch the reviewers read
+# and into the digest the receipt is keyed on, so the same diff would hash
+# differently depending on a git setting. Override both on the command line.
+git_diff() {
+    git --no-pager -c color.ui=false -c color.diff=false diff --no-color --no-ext-diff "$@"
+}
+
 diff_text() {
     if [ "$INCLUDE_WORKTREE" -eq 1 ]; then
-        git diff "$MERGE_BASE"          # committed range plus the dirty tree
+        git_diff "$MERGE_BASE"          # committed range plus the dirty tree
     else
-        git diff "$MERGE_BASE" HEAD
+        git_diff "$MERGE_BASE" HEAD
     fi
 }
 
@@ -124,18 +133,36 @@ if [ "$MODE" = "check" ]; then
     [ -f "$RECEIPT" ] || exit 1
     v="$(jq -r '.verdict // "MISSING"' "$RECEIPT" 2>/dev/null)"
     case "$v" in
-        PASS) exit 0 ;;
+        PASS) : ;;
         "CONDITIONAL PASS")
-            if [ "${GANDOLF_LOCAL_STRICT:-0}" = "1" ]; then exit 1; fi
-            exit 0 ;;
+            [ "${GANDOLF_LOCAL_STRICT:-0}" = "1" ] && exit 1 ;;
         *) exit 1 ;;
     esac
+    # The receipt is keyed on the DIFF, which is the right key for the code: the
+    # same patch against the same base is the same review. But a diff carries no
+    # commit author, committer, or message, so `git commit --amend` to reword — or
+    # anything that adds a `Co-authored-by:` trailer — leaves this receipt valid
+    # while changing the very thing Rule 0 checks. Verified: the key is byte
+    # identical before and after such an amend.
+    #
+    # Rekeying on commit metadata would fix it but invalidate the receipt on every
+    # rebase and every typo fix, forcing a fresh five-reviewer run for a subject
+    # line. So re-run just the commit-scoped sweep instead. It takes milliseconds
+    # and no receipt can vouch for a message it never hashed.
+    if ! bash "$HERE/pregate.sh" --base "$BASE_REF" --rule0-only >/dev/null 2>&1; then
+        echo "gandolf-local: the reviewed code still passes, but a commit now carries" >&2
+        echo "  AI attribution — which CI blocks as a required check (Rule 0)." >&2
+        echo "  Details:  bash $HERE/pregate.sh --rule0-only" >&2
+        echo "  Fix:      git rebase -i --exec 'git commit --amend --no-edit --reset-author' $BASE_REF" >&2
+        exit 1
+    fi
+    exit 0
 fi
 
 # ── full review ──────────────────────────────────────────────────────────────
-CHANGED_COUNT="$(git diff --name-only "$MERGE_BASE" HEAD | grep -c . || true)"
+CHANGED_COUNT="$(git_diff --name-only "$MERGE_BASE" HEAD | grep -c . || true)"
 if [ "$INCLUDE_WORKTREE" -eq 1 ]; then
-    CHANGED_COUNT="$(git diff --name-only "$MERGE_BASE" | grep -c . || true)"
+    CHANGED_COUNT="$(git_diff --name-only "$MERGE_BASE" | grep -c . || true)"
 fi
 if [ "$CHANGED_COUNT" -eq 0 ]; then
     echo "gandolf-local: nothing changed against $BASE_REF — no review to run."
@@ -151,9 +178,9 @@ REPORT="$STATE/reports/$REVIEW_KEY.md"
 
 diff_text >"$DIFF_FILE"
 if [ "$INCLUDE_WORKTREE" -eq 1 ]; then
-    git diff --name-only "$MERGE_BASE" >"$FILES_FILE"
+    git_diff --name-only "$MERGE_BASE" >"$FILES_FILE"
 else
-    git diff --name-only "$MERGE_BASE" HEAD >"$FILES_FILE"
+    git_diff --name-only "$MERGE_BASE" HEAD >"$FILES_FILE"
 fi
 
 echo "gandolf-local — local review gate"

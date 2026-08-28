@@ -131,14 +131,44 @@ elif [ -n "\${CLAUDECODE:-}" ]; then
     exit 1
 else
     echo "gandolf-local: no review on record for this tree — running it now."
-    echo "  Four reviewers plus the deterministic checks. This takes a while."
+    echo "  Five reviewers plus the deterministic checks. This takes a while."
     echo "  Set GANDOLF_LOCAL=0 to skip the gate for one push."
+    echo "  Interrupting the push (Ctrl-C) also stops the review."
     echo ""
-    if bash "\$__gl_review" </dev/null; then
+    # Do NOT let the review outlive the push that asked for it. Observed for real:
+    # a push was interrupted, the hook and git went away, and review.sh kept
+    # running with parent process 1 and five model processes still going, with
+    # nothing left to read the result. So run it in the background, record its
+    # process id, and trap the signals a cancelled push delivers so the whole
+    # process group dies with the push. \`wait\` still yields its exit status, and
+    # killing the negated pid targets the group, which is what actually stops the
+    # reviewers rather than just their launcher.
+    set -m 2>/dev/null || true
+    bash "\$__gl_review" </dev/null &
+    __gl_pid=\$!
+    trap 'kill -TERM -\$__gl_pid 2>/dev/null; kill -TERM \$__gl_pid 2>/dev/null' INT TERM HUP
+    wait "\$__gl_pid"
+    __gl_rc=\$?
+    trap - INT TERM HUP
+
+    # Decide on the RECEIPT, not on that exit status. Interrupting the push kills
+    # the review's process group, and a shell whose child was killed can still run
+    # on to its last line and exit zero — measured: after an interrupt the review
+    # died, yet the launcher returned zero and this hook allowed the push. An
+    # interrupted or crashed review must never read as a pass, so ask the same
+    # question the hook opened with: is there a passing review for this exact tree?
+    # That depends on a receipt the review only writes once it has actually reached
+    # a verdict, which no signal can fake.
+    if bash "\$__gl_review" --check </dev/null; then
         echo "gandolf-local: review passed — allowing the push."
     else
         echo "" >&2
-        echo "gandolf-local: BLOCKED — the review did not pass." >&2
+        if [ "\$__gl_rc" -ne 0 ]; then
+            echo "gandolf-local: BLOCKED — the review did not pass (exit \$__gl_rc)." >&2
+        else
+            echo "gandolf-local: BLOCKED — the review ended without recording a passing" >&2
+            echo "  verdict for this tree. It was most likely interrupted." >&2
+        fi
         echo "  Report: bash \$__gl_review --status" >&2
         exec <"\$__gl_refs"; rm -f "\$__gl_refs"
         exit 1

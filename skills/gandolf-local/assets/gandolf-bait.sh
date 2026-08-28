@@ -38,13 +38,37 @@ MERGE_BASE="$(git merge-base "$BASE_SHA" HEAD)" || MERGE_BASE="$BASE_SHA"
 WORK="$(mktemp -d -t gandolf-bait)"
 trap 'rm -rf "$WORK"' EXIT
 
+# Every diff this script parses goes through here, and the flags are not
+# decoration. `color.ui = always` or `color.diff = always` in ANY config scope
+# forces ANSI escapes even when the output is a pipe, so every added line arrives
+# as ESC[32m+ESC[32m... — the awk rules below match nothing, the added-line list
+# comes back empty, and all twelve added-line checks report clean. That is this
+# gate announcing a pass it did not earn, over exactly the violations it exists to
+# find. `diff.external` / GIT_EXTERNAL_DIFF replaces the output wholesale and
+# breaks it the same way. Overriding on the command line beats every config scope,
+# and --no-ext-diff ignores an external driver. Verified by reproducing the silent
+# pass with each setting and confirming this form parses correctly under both.
+git_diff() {
+    git --no-pager -c color.ui=false -c color.diff=false diff --no-color --no-ext-diff "$@"
+}
+
 CHANGED="$WORK/changed.txt"
-git diff --name-only "$MERGE_BASE" HEAD >"$CHANGED"
+# A read failure must not look like "nothing changed" — that is the same false
+# clean. `set -e` is deliberately off in this script, so check explicitly.
+if ! git_diff --name-only "$MERGE_BASE" HEAD >"$CHANGED"; then
+    echo "gandolf-bait: cannot read the changed-file list for $MERGE_BASE..HEAD" >&2
+    exit 2
+fi
 
 # Added lines as file:line:content. -U0 so no context line is mistaken for an
 # addition, and the hunk header carries the new-file line number to count from.
 ADDED="$WORK/added.txt"
-git diff -U0 "$MERGE_BASE" HEAD | awk '
+RAW="$WORK/raw.diff"
+if ! git_diff -U0 "$MERGE_BASE" HEAD >"$RAW"; then
+    echo "gandolf-bait: cannot read the diff for $MERGE_BASE..HEAD" >&2
+    exit 2
+fi
+awk '
     /^\+\+\+ b\// { file = substr($0, 7); next }
     /^\+\+\+ / { file = "?"; next }
     /^@@/ {
@@ -52,7 +76,7 @@ git diff -U0 "$MERGE_BASE" HEAD | awk '
         next
     }
     /^\+/ { print file ":" ln ":" substr($0, 2); ln++; next }
-' >"$ADDED"
+' <"$RAW" >"$ADDED"
 
 FINDINGS="$WORK/findings.md"
 CERTAIN_FLAG="$WORK/certain"
@@ -252,7 +276,7 @@ fi
 # process-wide state — is thereby taken OUT of the bundle, so if no make target
 # names it, nothing runs it at all.
 newtests="$WORK/newtests.txt"; : >"$newtests"
-git diff --name-only --diff-filter=A "$MERGE_BASE" HEAD \
+git_diff --name-only --diff-filter=A "$MERGE_BASE" HEAD \
     | grep -E '^dfl/crates/[^/]+/tests/.*\.rs$' >"$newtests" || true
 if [ -s "$newtests" ] && [ -f dfl/Makefile ]; then
     orphan="$WORK/orphan.txt"; : >"$orphan"

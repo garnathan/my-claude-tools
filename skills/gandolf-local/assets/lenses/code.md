@@ -26,10 +26,15 @@ Look for:
 - **Dead code and drift** — a branch that can never be taken, a parameter never
   read, a function no caller reaches, a doc comment that contradicts the body,
   a constant duplicated instead of imported.
-- **False claims** — a code comment, commit message, or doc line in this diff
-  that asserts something untrue: an issue number that does not exist or does not
-  track the thing, "covered by X" where X does not cover it, "already tested"
-  where no test exists. Check each one.
+- **False claims** — a code comment, commit message, doc line, README, or CI
+  workflow comment in this diff that asserts something untrue: an issue number
+  that does not exist or does not track the thing, "covered by X" where X does
+  not cover it, "already tested" where no test exists. When a doc, a workflow
+  name, or a step comment describes what a suite runs — which browsers, which
+  projects, "the same four checks", "desktop plus two phone viewports" — open the
+  config it refers to and count what really runs. A count word that disagrees
+  with the list beside it is a finding, and so is a comparison check whose comment
+  omits an assumption it depends on. Check each one.
 
 Do not review for memory, locking, or security posture — three other reviewers
 own those. If you notice something there, mention it in one line under Residual

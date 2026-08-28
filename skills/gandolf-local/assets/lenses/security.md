@@ -22,6 +22,18 @@ Look for:
   compiler or a parameterised builder; a shell command built from input; log
   injection through an unescaped newline; a template or expression evaluated
   from user text.
+- **Supply-chain and lockfile guards** — a guard that blocks one named-bad value
+  (a denylist) is weaker than one that permits only a known-good value (an
+  allowlist); prefer the allowlist for registry, mirror, and dependency-source
+  checks. A guard must also mean what its comment claims: one matching only
+  `http` and `https` URLs silently skips `git+https:`, `git+ssh:` and `file:`
+  entries, so it does not "catch a mirror on any host".
+- **Untrusted code in pull-request workflows** — a `pull_request`-triggered job
+  runs fork code, and `npm ci` runs dependency lifecycle scripts while `apt-get`
+  runs as root. That is safe only when the job holds read-only `contents` scope
+  and no secrets. Confirm there is no `secrets.*` reference and no write scope.
+  Adding either to such a job is a policy change needing human sign-off, not a
+  routine fix.
 - **Path traversal and SSRF** — `..` or an absolute path reaching a file open; a
   bucket key or object name taken from input without canonicalising through
   `dfl_common::env::oci_key`; a URL fetched from user input with no allowlist,

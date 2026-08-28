@@ -24,7 +24,12 @@ Look for:
 - **Time-of-check to time-of-use races** — an existence or capacity check
   followed by an act on the result, with the state readable or writable by
   another task in between. Includes "read the manifest, then write" and "check
-  the version, then commit" without a compare-and-set.
+  the version, then commit" without a compare-and-set. It includes shell and
+  Makefile recipes: a presence-only check such as `[ ! -d node_modules ] && npm
+  ci` reuses a stale directory when the lockfile moved on, and a fixed scratch
+  path shared by two concurrent runs interleaves and yields a bogus verdict. Name
+  the fixed path and the presence-only check even when the fix is left as
+  documented.
 - **CPU-bound work inside an async handler** with no `spawn_blocking` — parsing,
   compression, hashing, embedding, or index building on a tokio worker thread.
 - **Durability and commit ordering** — a write not flushed or fsynced before the

@@ -8,14 +8,14 @@
 # backoff, the once-per-pull-request label. None of it is the review. This script
 # is the review, run before a push instead of after one.
 #
-# Four reviewers, one per lens, as four separate operating-system processes
-# rather than four sub-agents inside one session. That is deliberate: the CI
-# skill carries a warning that firing sub-agents and then ending the turn kills
-# the session with every reviewer still running and nothing posted, which is what
-# happened on pull request #11303. Four independent processes cannot fail that
-# way, and they are genuinely concurrent.
+# Five reviewers, one per lens, as five separate operating-system processes
+# rather than sub-agents inside one session. That is deliberate: the CI skill
+# carries a warning that firing sub-agents and then ending the turn kills the
+# session with every reviewer still running and nothing posted, which is what
+# happened on pull request #11303. Independent processes cannot fail that way,
+# and they are genuinely concurrent.
 #
-#   review.sh                    Full gate: pre-gate, four reviewers, report.
+#   review.sh                    Full gate: pre-gate, five reviewers, report.
 #   review.sh --check            Is there a valid receipt for this exact tree?
 #                                Exit 0 yes, 1 no. Used by the pre-push hook.
 #   review.sh --status           Print what the last review decided.
@@ -25,7 +25,10 @@
 #                           push carries commits, so the hook must judge commits.
 #   --quick-pregate         Pass --quick to the pre-gate (skip clippy and tests).
 #   --skip-pregate          Skip the deterministic checks entirely.
-#   --lens <name>           Run one lens only (code|security|memory|concurrency).
+#   --lens <name>           Run one lens only: code, security, memory,
+#                           concurrency or gandolf. A single-lens run still
+#                           writes a report, but its receipt records the reduced
+#                           scope and will NOT unlock a push.
 #
 # A receipt is written under the repository's git directory, keyed by the hash of
 # the diff it reviewed. This is the local counterpart of CI's
@@ -33,7 +36,9 @@
 # pull request across later commits, so a green review can sit over a diff nobody
 # read — which is the normal case, because gandolf pushes its own fix commits
 # after reviewing. Keying on the content means a receipt stops being valid the
-# moment the tree changes.
+# moment the tree changes. The receipt also records which lenses ran and whether
+# the deterministic half ran, and `--check` requires both to be complete, so a
+# narrowed run cannot unlock a push.
 #
 # Written for bash 3.2, which is what macOS ships. There is no `timeout` on
 # macOS, so the reviewer deadline is enforced by polling.
@@ -138,6 +143,30 @@ if [ "$MODE" = "check" ]; then
             [ "${GANDOLF_LOCAL_STRICT:-0}" = "1" ] && exit 1 ;;
         *) exit 1 ;;
     esac
+    # A receipt only unlocks a push if the run that wrote it actually covered the
+    # change. Both narrowing flags used to mint a receipt with full authority, and
+    # the script's own failure hint recommends one of them — so the documented way
+    # to debug a broken reviewer was also the way to unlock a push having reviewed
+    # a fifth of the change. A receipt written before this field existed has no
+    # `scope`, and is treated as insufficient rather than trusted.
+    scope_lenses="$(jq -r '.scope.lenses // ""' "$RECEIPT" 2>/dev/null)"
+    scope_pregate="$(jq -r '.scope.pregate_ran // false' "$RECEIPT" 2>/dev/null)"
+    for want in code security memory concurrency gandolf; do
+        case " $scope_lenses " in
+            *" $want "*) ;;
+            *)
+                echo "gandolf-local: the review on record for this tree did not run the '$want' lens" >&2
+                echo "  (it ran: ${scope_lenses:-unrecorded}). A partial review does not unlock a push." >&2
+                echo "  Run the full gate:  bash $HERE/review.sh" >&2
+                exit 1 ;;
+        esac
+    done
+    if [ "$scope_pregate" != "true" ]; then
+        echo "gandolf-local: the review on record for this tree skipped the deterministic" >&2
+        echo "  checks, so clippy, the rule sweep and the commit sweep never ran on it." >&2
+        echo "  Run the full gate:  bash $HERE/review.sh" >&2
+        exit 1
+    fi
     # The receipt is keyed on the DIFF, which is the right key for the code: the
     # same patch against the same base is the same review. But a diff carries no
     # commit author, committer, or message, so `git commit --amend` to reword — or
@@ -169,7 +198,10 @@ if [ "$CHANGED_COUNT" -eq 0 ]; then
     exit 0
 fi
 
-RUN="$STATE/runs/$KEY_SHORT"
+# Include the process id: the key is content-derived, so two worktrees holding the
+# same diff produce the same key, and the `rm -rf` below would delete a concurrent
+# run's working files out from under it.
+RUN="$STATE/runs/$KEY_SHORT-$$"
 rm -rf "$RUN"; mkdir -p "$RUN"
 DIFF_FILE="$RUN/diff.patch"
 FILES_FILE="$RUN/files.txt"
@@ -197,7 +229,8 @@ echo ""
 PREGATE_OK=1
 if [ "$RUN_PREGATE" -eq 1 ]; then
     # shellcheck disable=SC2086
-    if bash "$HERE/pregate.sh" --base "$BASE_REF" --report "$PREGATE_REPORT" $PREGATE_ARGS; then
+    if [ "$INCLUDE_WORKTREE" -eq 1 ]; then PREGATE_ARGS="$PREGATE_ARGS --include-worktree"; fi
+    if bash "$HERE/pregate.sh" --base "$BASE_REF" --report "$PREGATE_REPORT" --logdir "$RUN/pregate-logs" $PREGATE_ARGS; then
         PREGATE_OK=1
     else
         PREGATE_OK=0
@@ -329,7 +362,7 @@ for p in $pids; do
         FAILED_LENSES="$FAILED_LENSES $lens"
         echo "  reviewer $lens did not produce a report (exit $rc) — see $RUN/stderr-$lens.log"
     else
-        v="$(grep -m1 -oE 'Verdict: *(PASS|CONDITIONAL PASS|FAIL)' "$RUN/report-$lens.md" | sed 's/Verdict: *//')"
+        v="$(sed -nE 's/^#{1,4} *Verdict: *(PASS|CONDITIONAL PASS|FAIL) *$/\1/p' "$RUN/report-$lens.md" | head -1)"
         echo "  reviewer $lens: ${v:-no verdict line} ($(wc -l <"$RUN/report-$lens.md" | tr -d ' ') lines)"
     fi
 done
@@ -467,12 +500,27 @@ if [ "$CONSOL_RC" -ne 0 ] || [ ! -s "$RUN/consolidated.md" ]; then
 fi
 
 # ── stage 4: verdict, report, receipt ────────────────────────────────────────
-VERDICT="$(grep -m1 -oE 'Verdict: *(PASS|CONDITIONAL PASS|FAIL)' "$RUN/consolidated.md" | sed 's/Verdict: *//')"
+# Anchor to a heading line whose value ENDS the line. The previous form took the
+# first "Verdict:" match anywhere, which the output template itself satisfies —
+# "### Verdict: PASS | CONDITIONAL PASS | FAIL" matched as PASS, so a consolidator
+# that echoed the template instead of filling it in scored a pass over whatever it
+# had actually found. Requiring the line to end at the value rejects that.
+VERDICT="$(sed -nE 's/^#{1,4} *Verdict: *(PASS|CONDITIONAL PASS|FAIL) *$/\1/p' "$RUN/consolidated.md" | head -1)"
 # No parsable verdict means no verdict. Refuse rather than assume the good one.
 if [ -z "$VERDICT" ]; then
     echo "gandolf-local: FAILED — the consolidated report carries no verdict line."
     echo "  Report: $RUN/consolidated.md"
     exit 1
+fi
+# A stated verdict must not outrank the findings the script itself just counted.
+# The consolidator writes both, and they can disagree — a summary that reads well
+# while listing blockers underneath is exactly the failure this catches.
+if [ "${N_CRIT:-0}" -gt 0 ] || [ "${N_HIGH:-0}" -gt 0 ]; then
+    if [ "$VERDICT" != "FAIL" ]; then
+        echo "  the report states $VERDICT but lists ${N_CRIT:-0} critical and ${N_HIGH:-0} high"
+        echo "  finding(s) — taking the findings, so the verdict is FAIL"
+        VERDICT="FAIL"
+    fi
 fi
 # A failed pre-gate is Blocking by definition; do not let a reviewer's optimism
 # outrank a check that will go red in continuous integration.
@@ -510,10 +558,14 @@ jq -n \
     --argjson critical "${N_CRIT:-0}" --argjson high "${N_HIGH:-0}" \
     --argjson medium "${N_MED:-0}" --argjson low "${N_LOW:-0}" --argjson nit "${N_NIT:-0}" \
     --argjson pregate "$PREGATE_OK" \
+    --arg lenses "$LENSES" --argjson pregate_ran "$RUN_PREGATE" \
+    --argjson worktree "$INCLUDE_WORKTREE" --arg base_ref "$BASE_REF" \
     '{review_key:$key, base:$base, head:$head, verdict:$verdict, reviewed_at:$at,
       report:$report, model:$model, blocking:$blocking, should_fix:$should_fix,
       findings:{critical:$critical, high:$high, medium:$medium, low:$low, nit:$nit},
-      pregate_passed:($pregate==1)}' >"$RECEIPT"
+      pregate_passed:($pregate==1),
+      scope:{lenses:$lenses, pregate_ran:($pregate_ran==1),
+             include_worktree:($worktree==1), base_ref:$base_ref}}' >"$RECEIPT"
 
 echo ""
 cat "$REPORT"

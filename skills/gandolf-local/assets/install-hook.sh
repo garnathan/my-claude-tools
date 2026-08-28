@@ -88,8 +88,21 @@ if [ -n "\${CI:-}" ] || [ -n "\${GITHUB_ACTIONS:-}" ]; then
     __gl_skip='running in CI'
 elif [ "\${GANDOLF_LOCAL:-1}" = "0" ]; then
     __gl_skip='GANDOLF_LOCAL=0'
-elif [ ! -f "\$__gl_review" ]; then
-    __gl_skip="the review script is missing (\$__gl_review)"
+fi
+
+# A missing review script must BLOCK, not skip. Skipping is fail-open: rename the
+# skill directory, or move it to another machine, and every push sails through a
+# gate that looks installed and enforces nothing — the one failure mode this hook
+# exists to prevent. Blocking is loud, recoverable in one command, and honest.
+# Checked after the two deliberate opt-outs above so CI and the kill switch still
+# work when the script genuinely is not there.
+if [ -z "\$__gl_skip" ] && [ ! -f "\$__gl_review" ]; then
+    echo "gandolf-local: BLOCKED — the review script is missing:" >&2
+    echo "    \$__gl_review" >&2
+    echo "  The gate cannot judge this push, and skipping would let every push through." >&2
+    echo "  Re-install it (bash <skill>/assets/install-hook.sh), or set GANDOLF_LOCAL=0 to bypass." >&2
+    exec <"\$__gl_refs"; rm -f "\$__gl_refs"
+    exit 1
 fi
 
 if [ -z "\$__gl_skip" ]; then
@@ -181,6 +194,47 @@ $END
 EOF
 }
 
+# Remove exactly the marked block from $HOOK, in place, or refuse.
+#
+# The naive form — awk skipping from BEGIN to END — deletes to end of file when
+# the END marker is missing or has been edited. In this repository the lines below
+# our block are `git lfs pre-push "$@"`, and this clone keeps real build inputs in
+# LFS, so a half-matched strip silently stops object upload on every push and the
+# resulting failures point nowhere near the cause. A destructive edit with no
+# check and no backup is not worth the two greps it takes to be sure.
+strip_block() {
+    local n_begin n_end tmp
+    n_begin="$(grep -cF "$BEGIN" "$HOOK")"
+    n_end="$(grep -cF "$END" "$HOOK")"
+    if [ "$n_begin" -ne 1 ] || [ "$n_end" -ne 1 ]; then
+        echo "gandolf-local: refusing to edit $HOOK — found $n_begin begin marker(s) and $n_end end marker(s), expected exactly one of each." >&2
+        echo "  Removing a partially-marked block would delete everything to the end of the file," >&2
+        echo "  including the 'git lfs pre-push' line this repository needs. Restore the markers by hand." >&2
+        return 1
+    fi
+    if [ "$(grep -nF "$BEGIN" "$HOOK" | cut -d: -f1)" -gt "$(grep -nF "$END" "$HOOK" | cut -d: -f1)" ]; then
+        echo "gandolf-local: refusing to edit $HOOK — the end marker precedes the begin marker." >&2
+        return 1
+    fi
+    # Keep a copy of what was there before any rewrite.
+    cp "$HOOK" "$HOOK.gandolf-local.bak" || return 1
+    tmp="$(mktemp)" || return 1
+    awk -v b="$BEGIN" -v e="$END" '
+        index($0, b) == 1 { skip = 1; next }
+        index($0, e) == 1 { skip = 0; next }
+        !skip { print }
+        END { if (skip) exit 3 }
+    ' "$HOOK" >"$tmp"
+    if [ "$?" -ne 0 ]; then
+        rm -f "$tmp"
+        echo "gandolf-local: the block in $HOOK is not terminated — $HOOK left untouched." >&2
+        return 1
+    fi
+    cat "$tmp" >"$HOOK"
+    rm -f "$tmp"
+    return 0
+}
+
 case "$ACTION" in
 status)
     echo "gandolf-local pre-push gate"
@@ -204,17 +258,10 @@ uninstall)
         echo "gandolf-local: not installed in $HOOK — nothing to remove."
         exit 0
     fi
-    tmp="$(mktemp)"
     # Delete exactly the marked range, so nothing is left behind and the file is
     # byte-for-byte what it was before the install.
-    awk -v b="$BEGIN" -v e="$END" '
-        index($0, b) == 1 { skip = 1; next }
-        index($0, e) == 1 { skip = 0; next }
-        !skip { print }
-    ' "$HOOK" >"$tmp"
-    cat "$tmp" >"$HOOK"
-    rm -f "$tmp"
-    echo "gandolf-local: removed the gate from $HOOK."
+    strip_block || exit 1
+    echo "gandolf-local: removed the gate from $HOOK (previous copy: $HOOK.gandolf-local.bak)."
     exit 0
     ;;
 esac
@@ -226,14 +273,7 @@ mkdir -p "$hooks_dir"
 if [ -f "$HOOK" ] && grep -qF "$BEGIN" "$HOOK"; then
     # Already installed. Replace the block in place so an updated call site lands
     # without a manual uninstall first.
-    tmp="$(mktemp)"
-    awk -v b="$BEGIN" -v e="$END" '
-        index($0, b) == 1 { skip = 1; next }
-        index($0, e) == 1 { skip = 0; next }
-        !skip { print }
-    ' "$HOOK" >"$tmp"
-    cat "$tmp" >"$HOOK"
-    rm -f "$tmp"
+    strip_block || exit 1
     echo "gandolf-local: refreshing the existing block."
 fi
 

@@ -21,10 +21,15 @@ set -uo pipefail
 
 BASE_REF="origin/main"
 REPORT=""
+INCLUDE_WORKTREE=0
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --base)   BASE_REF="${2:-}"; [ -n "$BASE_REF" ] || { echo "--base needs a ref" >&2; exit 2; }; shift 2 ;;
         --report) REPORT="${2:-}"; [ -n "$REPORT" ] || { echo "--report needs a path" >&2; exit 2; }; shift 2 ;;
+        # Include uncommitted work. review.sh forwards this so the mechanical
+        # sweep judges the same content the reviewers were given; without it the
+        # sweep silently checked only the committed part and reported clean.
+        --include-worktree) INCLUDE_WORKTREE=1; shift ;;
         -h|--help) sed -n '2,18p' "$0"; exit 0 ;;
         *) echo "unknown argument: $1" >&2; exit 2 ;;
     esac
@@ -52,10 +57,14 @@ git_diff() {
     git --no-pager -c color.ui=false -c color.diff=false diff --no-color --no-ext-diff "$@"
 }
 
+# The revision range every check below reads. Omitting HEAD makes git compare the
+# base against the WORKING TREE, which is what --include-worktree asks for.
+if [ "$INCLUDE_WORKTREE" -eq 1 ]; then RANGE="$MERGE_BASE"; else RANGE="$MERGE_BASE HEAD"; fi
+
 CHANGED="$WORK/changed.txt"
 # A read failure must not look like "nothing changed" — that is the same false
 # clean. `set -e` is deliberately off in this script, so check explicitly.
-if ! git_diff --name-only "$MERGE_BASE" HEAD >"$CHANGED"; then
+if ! git_diff --name-only $RANGE >"$CHANGED"; then
     echo "gandolf-bait: cannot read the changed-file list for $MERGE_BASE..HEAD" >&2
     exit 2
 fi
@@ -64,7 +73,7 @@ fi
 # addition, and the hunk header carries the new-file line number to count from.
 ADDED="$WORK/added.txt"
 RAW="$WORK/raw.diff"
-if ! git_diff -U0 "$MERGE_BASE" HEAD >"$RAW"; then
+if ! git_diff -U0 $RANGE >"$RAW"; then
     echo "gandolf-bait: cannot read the diff for $MERGE_BASE..HEAD" >&2
     exit 2
 fi
@@ -129,12 +138,26 @@ code_added() {
 # "inside a test module" by the first `#[cfg(test)]` in the file, which in this
 # codebase is the bottom test module.
 is_test_context() {  # is_test_context <file> <line>
-    local f="$1" l="$2" marker
+    local f="$1" l="$2" ln nxt boundary=""
     case "$f" in */tests/*|*/benches/*|*_test.rs|*/test_*.rs) return 0 ;; esac
     [ -f "$f" ] || return 1
-    marker="$(grep -n -m1 '#\[cfg(test)\]' "$f" 2>/dev/null | cut -d: -f1)"
-    [ -n "$marker" ] || return 1
-    [ "$l" -ge "$marker" ]
+    # The boundary is the LAST `#[cfg(test)]` that introduces a MODULE — the
+    # bottom test module. Taking the FIRST marker instead was wrong in the
+    # dangerous direction: 245 files in this workspace open with a `#[cfg(test)]`
+    # gating a `use`, a helper `fn`, or a `const`, and treating everything after
+    # it as test code exempted whole production files from every rule that uses
+    # this helper. A marker gating anything other than a module is skipped.
+    while IFS=: read -r ln _; do
+        [ -n "$ln" ] || continue
+        nxt="$(sed -n "$((ln + 1))p" "$f" 2>/dev/null)"
+        case "$nxt" in
+            *"mod "*) boundary="$ln" ;;
+        esac
+    done <<EOF
+$(grep -n '#\[cfg(test)\]' "$f" 2>/dev/null)
+EOF
+    [ -n "$boundary" ] || return 1
+    [ "$l" -ge "$boundary" ]
 }
 
 # Split "file:line:content" input into production hits (stdout) and test-context
@@ -168,11 +191,31 @@ src_added | grep -iE ':.*(\bTODO\b|\bFIXME\b|\bXXX\b|\bHACK\b|todo!\(|unimplemen
 # `static X: OnceLock<...>` declares one; a doc comment mentioning OnceLock does
 # not, so read code lines only. A declaration inside a test module is reported
 # separately, because tenant isolation is about the serving process.
+# CERTAIN is reserved for a MODULE-LEVEL declaration whose payload could plausibly
+# hold per-tenant data, because that is the shape of the isolation defect Rule 7
+# exists for. Two narrowings, both measured against this workspace:
+#
+#   - Require the `static` at content column zero. 159 declarations here are
+#     function-local memoisation caches (`static PATH: OnceLock<String>` inside a
+#     helper); calling all of them certain rule violations would bury the 132
+#     module-level ones that actually matter.
+#   - Require a payload that can hold data — a map, a collection, or a type named
+#     for a store, cache, registry, overlay, schema, token or credential. A
+#     `OnceLock<String>` holding a path is not the tenant-isolation defect.
+#
+# Anything process-wide that misses those tests is still reported, as ADVISORY.
 T7="$WORK/t7-test.txt"
-code_added | grep -E ':.*(OnceLock|OnceCell|lazy_static!|thread_local!|static +[A-Z_]+ *: *(Mutex|RwLock|HashMap))' \
-    | split_test_context "$T7" \
-    | hit CERTAIN "Rule 7 — new process-wide mutable state" \
+T7_WIDE="$WORK/t7-wide.txt"
+code_added \
+    | grep -E ':.*(OnceLock|OnceCell|lazy_static!|thread_local!|static +[A-Z_]+ *: *(Mutex|RwLock|HashMap))' \
+    | split_test_context "$T7" >"$T7_WIDE"
+grep -E ':(pub(\([a-z]+\))? )?(static|lazy_static!|thread_local!)' "$T7_WIDE" 2>/dev/null \
+    | grep -iE '(HashMap|BTreeMap|HashSet|Vec<|Store|Cache|Registry|Overlay|Schema|Token|Credential|Wallet|Session|Tenant|Agent)' \
+    | hit CERTAIN "Rule 7 — new module-level process-wide state that could hold per-tenant data" \
       "key it per agent_id and pass it explicitly, or say in a comment why it holds no per-tenant data"
+grep -vE ':(pub(\([a-z]+\))? )?(static|lazy_static!|thread_local!)' "$T7_WIDE" 2>/dev/null \
+    | hit ADVISORY "Rule 7 — process-wide state added inside a function" \
+      "usually a memoisation cache and fine; confirm it holds nothing scoped to one tenant"
 cat "$T7" | hit ADVISORY "Rule 7 — process-wide state added inside a test module" \
     "usually fine, but a bundled test binary cannot re-set a OnceLock between cases — check the test does not depend on ordering"
 
@@ -193,6 +236,10 @@ code_added | grep -E ':.*to_cache\(' \
     | split_test_context "$T3" \
     | hit CERTAIN "Rule 3 — to_cache() copies a whole frame into memory" \
       "use to_rowset_path() and pass the file path to the next stage"
+# The test-context hits were being collected into a file nothing ever read, so
+# they silently vanished. Report them, like every other split does.
+cat "$T3" | hit ADVISORY "Rule 3 — to_cache() inside a test module" \
+    "fine for a small fixture; confirm the frame is bounded and that no production path shares the helper"
 
 # ── Rule 5: error-ids.md is nightly-owned ───────────────────────────────────
 grep -E 'docs/reference/error-ids\.md' "$CHANGED" \
@@ -241,27 +288,46 @@ src_added | grep -E ':.*(set +-x|set +-o +xtrace|bash +-x)' \
       "turn tracing off across every credential load and use, and back on after"
 
 # ── Rule 5 / ENVIRONMENT.md: a new environment variable must be documented ──
+# Read from CODE lines only: a doc comment quoting `env::var("FOO")` as an example
+# is documentation, and minting a variable name from it sends the author to
+# document something that does not exist.
+#
+# Severity is split by what actually blocks a merge. The white page and the
+# DFL_ENV_VARS registry list are enforced by a test, so a name missing from either
+# is CERTAIN. ENVIRONMENT.md is prose organised into tables and value-convention
+# sections, and a plain substring search over it produces a large number of false
+# misses on names that ARE documented — so that arm is ADVISORY. Getting this
+# backwards would have the gate demand documentation for names already shipped.
 env_new="$WORK/env.txt"; : >"$env_new"
-src_added | grep -oE 'env::var(_os)? *\( *"[A-Z][A-Z0-9_]+"' \
+code_added | grep -oE 'env::var(_os)? *\( *"[A-Z][A-Z0-9_]+"' \
     | grep -oE '"[A-Z][A-Z0-9_]+"' | tr -d '"' | sort -u >"$env_new" || true
 if [ -s "$env_new" ]; then
     undoc="$WORK/undoc.txt"; : >"$undoc"
+    softdoc="$WORK/softdoc.txt"; : >"$softdoc"
     while IFS= read -r v; do
         [ -z "$v" ] && continue
-        miss=""
-        [ -f dfl/docs/ENVIRONMENT.md ] && ! grep -qF "$v" dfl/docs/ENVIRONMENT.md && miss="$miss ENVIRONMENT.md"
-        [ -f dfl/docs/reference/env-vars-whitepage.md ] && ! grep -qF "$v" dfl/docs/reference/env-vars-whitepage.md && miss="$miss env-vars-whitepage.md"
+        # Obvious placeholders from examples and doctests, not real names.
+        case "$v" in FOO|BAR|BAZ|EXAMPLE|TEST|VAR|NAME|KEY|VALUE|X|Y|Z) continue ;; esac
+        hard=""
+        [ -f dfl/docs/reference/env-vars-whitepage.md ] \
+            && ! grep -qF "$v" dfl/docs/reference/env-vars-whitepage.md \
+            && hard="$hard env-vars-whitepage.md"
         case "$v" in
             DFL_*)
                 [ -f dfl/crates/dfl-common/src/env_registry.rs ] \
                     && ! grep -qF "$v" dfl/crates/dfl-common/src/env_registry.rs \
-                    && miss="$miss env_registry.rs(DFL_ENV_VARS)"
+                    && hard="$hard env_registry.rs(DFL_ENV_VARS)"
                 ;;
         esac
-        [ -n "$miss" ] && printf '%s — missing from:%s\n' "$v" "$miss" >>"$undoc"
+        [ -n "$hard" ] && printf '%s — missing from:%s\n' "$v" "$hard" >>"$undoc"
+        if [ -f dfl/docs/ENVIRONMENT.md ] && ! grep -qF "$v" dfl/docs/ENVIRONMENT.md; then
+            printf '%s — not found in ENVIRONMENT.md\n' "$v" >>"$softdoc"
+        fi
     done <"$env_new"
-    cat "$undoc" | hit CERTAIN "Rule 5 — an environment variable is read but not documented" \
+    cat "$undoc" | hit CERTAIN "Rule 5 — an environment variable is read but not registered" \
         "add it to each file listed; the DFL_ENV_VARS entry is a merge-blocking test, not a doc"
+    cat "$softdoc" | hit ADVISORY "Rule 5 — an environment variable may be missing from ENVIRONMENT.md" \
+        "document its accepted values and default there; check by hand, since that page is organised into tables and sections"
 fi
 
 # ── Rule 4: a new test that nothing actually runs ────────────────────────────
@@ -276,7 +342,7 @@ fi
 # process-wide state — is thereby taken OUT of the bundle, so if no make target
 # names it, nothing runs it at all.
 newtests="$WORK/newtests.txt"; : >"$newtests"
-git_diff --name-only --diff-filter=A "$MERGE_BASE" HEAD \
+git_diff --name-only --diff-filter=A $RANGE \
     | grep -E '^dfl/crates/[^/]+/tests/.*\.rs$' >"$newtests" || true
 if [ -s "$newtests" ] && [ -f dfl/Makefile ]; then
     orphan="$WORK/orphan.txt"; : >"$orphan"

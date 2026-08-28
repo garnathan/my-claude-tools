@@ -215,6 +215,20 @@ Three details matter:
   timeout. So it blocks with the command to run, which is the enforcement the
   gate exists for. If you are an agent and a push is refused this way, run the
   review — do not set `GANDOLF_LOCAL=0` unless the user tells you to.
+- **A narrowed run cannot unlock a push.** The receipt records which lenses ran
+  and whether the deterministic half ran, and `--check` requires both to be
+  complete. This matters because the script's own advice when a reviewer fails is
+  to re-run one lens, so without the scope check the documented way to debug the
+  tool was also a way to unlock a push having reviewed a fifth of the change. A
+  receipt written before that field existed counts as incomplete.
+- **It fails closed.** If the review script is missing — the skill moved, renamed,
+  or absent on another machine — the hook blocks and says so. Skipping would let
+  every push through a gate that looks installed and enforces nothing.
+- **Uninstall refuses rather than guessing.** Removing the block is a destructive
+  edit to a file whose remaining line is `git lfs pre-push`, so it checks there is
+  exactly one begin and one end marker in the right order first, and keeps a
+  `.gandolf-local.bak` copy. A partially-marked block used to delete everything to
+  the end of the file, taking the Git LFS invocation with it.
 
 ## Closing the loop after a real review
 

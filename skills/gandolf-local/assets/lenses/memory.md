@@ -27,7 +27,10 @@ Look for:
 - **Resource lifetime** — a file handle, socket, temp file, mapped region, or
   spawned task with no `Drop` and no explicit close; a temp file whose cleanup
   is skipped on the error path; an `Arc` cycle that can never drop; `Box::leak`
-  or a deliberate `mem::forget`.
+  or a deliberate `mem::forget`. This covers shell and Makefile recipes too: a
+  scratch directory created before a build, whose removal runs only on the success
+  path, leaves a partial directory behind whenever the build itself fails. Remove
+  it up front and clean it unconditionally.
 - **Streaming that is not streaming** — a "streaming" reader or writer that
   buffers the whole payload first; a decompressor that reads to end before
   emitting; a channel with an unbounded queue standing in for backpressure, or a

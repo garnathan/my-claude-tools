@@ -4,7 +4,7 @@
 #
 # Runs the checks a machine can decide, before any language model is spent on the
 # change. Order matters: clippy answers in seconds what a reviewer would take
-# minutes to notice, and the four reviewers are the expensive part of the gate.
+# minutes to notice, and the five reviewers are the expensive part of the gate.
 #
 # Every check here mirrors one that blocks a merge in CI, so a clean run means
 # the corresponding CI job will also be clean:
@@ -18,12 +18,20 @@
 #   cargo check / cargo test      ci.yml          build-and-test, scoped to touched crates
 #
 #   pregate.sh [--base <ref>] [--quick] [--no-test] [--report <file>]
+#              [--logdir <dir>] [--include-worktree] [--rule0-only]
 #
-#     --base <ref>   Compare against this ref. Default: origin/main.
-#     --quick        Skip clippy, shear, and the tests. Keeps the build-free
-#                    checks, which take seconds.
-#     --no-test      Run clippy and shear, skip cargo test.
-#     --report <f>   Append a markdown summary to this file.
+#     --base <ref>        Compare against this ref. Default: origin/main.
+#     --quick             Skip clippy, shear, and the tests. Keeps the build-free
+#                         checks, which take seconds.
+#     --no-test           Run clippy and shear, skip cargo test.
+#     --report <f>        Append a markdown summary to this file.
+#     --logdir <d>        Put the per-check logs here. Defaults to a unique
+#                         directory, so two concurrent runs cannot overwrite each
+#                         other's evidence.
+#     --include-worktree  Judge uncommitted work too. review.sh forwards this so
+#                         both halves of the gate see the same content.
+#     --rule0-only        Run only the commit-scoped no-AI-attribution sweep and
+#                         exit with its status.
 #
 # Exit status: 0 when every check that ran passed, 1 when any failed, 2 on a
 # usage error. A check that cannot run (a tool missing, a path absent) is
@@ -38,6 +46,8 @@ QUICK=0
 RUN_TEST=1
 REPORT=""
 RULE0_ONLY=0
+INCLUDE_WORKTREE=0
+LOGDIR_ARG=""
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -53,6 +63,8 @@ while [ "$#" -gt 0 ]; do
         # This costs milliseconds, so the hook re-runs it every time rather than
         # letting a receipt vouch for a message it never hashed.
         --rule0-only) RULE0_ONLY=1; shift ;;
+        --include-worktree) INCLUDE_WORKTREE=1; shift ;;
+        --logdir) LOGDIR_ARG="${2:-}"; [ -n "$LOGDIR_ARG" ] || { echo "--logdir needs a path" >&2; exit 2; }; shift 2 ;;
         -h|--help) sed -n '2,30p' "$0"; exit 0 ;;
         *)         echo "unknown argument: $1" >&2; exit 2 ;;
     esac
@@ -77,7 +89,8 @@ git_diff() {
     git --no-pager -c color.ui=false -c color.diff=false diff --no-color --no-ext-diff "$@"
 }
 
-CHANGED="$(git_diff --name-only "$MERGE_BASE" HEAD 2>/dev/null)"
+if [ "$INCLUDE_WORKTREE" -eq 1 ]; then RANGE="$MERGE_BASE"; else RANGE="$MERGE_BASE HEAD"; fi
+CHANGED="$(git_diff --name-only $RANGE 2>/dev/null)"
 
 # ── result accounting ────────────────────────────────────────────────────────
 # Parallel newline-delimited lists rather than an associative array: bash 3.2 has
@@ -86,7 +99,17 @@ PASSED=""; FAILED=""; SKIPPED=""
 # Absolute — see the note in review.sh: `--git-common-dir` is relative in a main
 # clone, and a relative log path in a printed failure message is useless to anyone
 # reading it from elsewhere.
-LOGDIR="$(cd "$(git rev-parse --git-common-dir)" && pwd)/gandolf-local/pregate"
+# One directory per run. The path used to be fixed and shared, and the state
+# directory is the repository's COMMON git dir — shared by a clone and all of its
+# worktrees. Two gates running at once (which happens: three were observed
+# concurrently) overwrote each other's logs, so a printed failure could quote
+# another run's evidence. review.sh passes its own run directory in; a standalone
+# run gets a unique one.
+if [ -n "$LOGDIR_ARG" ]; then
+    LOGDIR="$LOGDIR_ARG"
+else
+    LOGDIR="$(cd "$(git rev-parse --git-common-dir)" && pwd)/gandolf-local/pregate/$$-$(date +%s)"
+fi
 mkdir -p "$LOGDIR"
 
 record() {  # record <status> <name>
@@ -204,12 +227,13 @@ else
     # scripts-only change: Rule 0, the error-ID catalogue, and the environment
     # variable documentation duty all live outside dfl/crates.
     BAIT="$(cd "$(dirname "$0")" && pwd)/gandolf-bait.sh"
+    if [ "$INCLUDE_WORKTREE" -eq 1 ]; then BAIT_WT="--include-worktree"; else BAIT_WT=""; fi
     if [ -n "$REPORT" ]; then
         run_check "gandolf-bait (rule violations by grep)" "$LOGDIR/bait.log" \
-            bash "$BAIT" --base "$BASE_REF" --report "$REPORT"
+            bash "$BAIT" --base "$BASE_REF" $BAIT_WT --report "$REPORT"
     else
         run_check "gandolf-bait (rule violations by grep)" "$LOGDIR/bait.log" \
-            bash "$BAIT" --base "$BASE_REF"
+            bash "$BAIT" --base "$BASE_REF" $BAIT_WT
     fi
 
     if [ "$DFL_TOUCHED" -eq 0 ]; then

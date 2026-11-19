@@ -250,7 +250,15 @@ else
 
         # Which crates did this change touch? Read the name out of each
         # Cargo.toml rather than assuming it matches the directory.
+        #
+        # A file counts only when it can change what the crate's Rust build or
+        # tests do: a `.rs` file, a `Cargo.toml`, or a file whose name the crate's
+        # own Rust code mentions (a test that reads a front-end source, an
+        # `include_str!`). A change to a JavaScript release script inside a large
+        # crate used to start a full debug build of that crate for nothing, and a
+        # crate too large to build on a laptop then filled the disk.
         CRATES=""
+        SKIPPED_CRATES=""
         while IFS= read -r p; do
             [ -z "$p" ] && continue
             case "$p" in
@@ -259,8 +267,23 @@ else
                     mani="dfl/crates/$d/Cargo.toml"
                     if [ -f "$mani" ]; then
                         n="$(grep -m1 '^name *= *"' "$mani" | sed 's/.*"\(.*\)".*/\1/')"
-                        [ -n "$n" ] && CRATES="${CRATES}${n}
+                        rust_input=0
+                        case "$p" in
+                            *.rs|*/Cargo.toml) rust_input=1 ;;
+                            *)
+                                base="$(basename "$p")"
+                                if grep -rqF --include='*.rs' -- "$base" "dfl/crates/$d" 2>/dev/null; then
+                                    rust_input=1
+                                fi
+                                ;;
+                        esac
+                        if [ "$rust_input" -eq 1 ]; then
+                            [ -n "$n" ] && CRATES="${CRATES}${n}
 "
+                        else
+                            [ -n "$n" ] && SKIPPED_CRATES="${SKIPPED_CRATES}${n}
+"
+                        fi
                     fi
                     ;;
             esac
@@ -268,6 +291,14 @@ else
 $CHANGED
 EOF
         CRATES="$(printf '%s' "$CRATES" | grep . | sort -u)"
+        # A crate with a Rust input is built even when another of its files was
+        # skipped, so report only the crates that have no Rust input at all.
+        SKIPPED_CRATES="$(printf '%s' "$SKIPPED_CRATES" | grep . | sort -u | while IFS= read -r c; do
+            grep -qxF -- "$c" <<<"$CRATES" || printf '%s\n' "$c"
+        done)"
+        if [ -n "$SKIPPED_CRATES" ]; then
+            say "  no Rust input changed, so no clippy or cargo test for: $(printf '%s' "$SKIPPED_CRATES" | tr '\n' ' ')"
+        fi
 
         # Adopt the machine-local toolchain settings the repository already
         # detected. The Makefile pulls them from dfl/config.mk — written by
